@@ -1,0 +1,33 @@
+#ifndef UA55AudioDriver_h
+#define UA55AudioDriver_h
+
+#include <Availability.h>
+#include <DriverKit/OSSharedPtr.h>
+#include <AudioDriverKit/IOUserAudioDriver.iig>
+#include <USBDriverKit/IOUSBHostPipe.iig>
+
+class UA55AudioDriver: public IOUserAudioDriver
+{
+public:
+    virtual bool init(void) override;
+    virtual void free(void) override;
+    virtual kern_return_t Start(IOService* provider) override;
+    virtual kern_return_t Stop(IOService* provider) override;
+
+    virtual void CaptureIsochComplete(OSAction* action, IOReturn status)
+        TYPE(IOUSBHostPipe::CompleteAsyncIsochIO);
+    virtual void PlaybackIsochComplete(OSAction* action, IOReturn status)
+        TYPE(IOUSBHostPipe::CompleteAsyncIsochIO);
+    virtual void StatusInterruptComplete(OSAction* action,
+                                         IOReturn status,
+                                         uint32_t actualByteCount,
+                                         uint64_t completionTimestamp)
+        TYPE(IOUSBHostPipe::CompleteAsyncIO);
+    virtual void MidiInComplete(OSAction* action,
+                                IOReturn status,
+                                uint32_t actualByteCount,
+                                uint64_t completionTimestamp)
+        TYPE(IOUSBHostPipe::CompleteAsyncIO);
+};
+
+#endif

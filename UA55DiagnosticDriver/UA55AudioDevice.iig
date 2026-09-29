@@ -1,0 +1,30 @@
+#ifndef UA55AudioDevice_h
+#define UA55AudioDevice_h
+
+#include <Availability.h>
+#include <DriverKit/OSSharedPtr.h>
+#include <DriverKit/IOTimerDispatchSource.iig>
+#include <AudioDriverKit/IOUserAudioDevice.iig>
+
+class UA55AudioDevice: public IOUserAudioDevice
+{
+public:
+    virtual bool init(IOUserAudioDriver* in_driver,
+                      bool in_supports_prewarming,
+                      OSString* in_device_uid,
+                      OSString* in_model_uid,
+                      OSString* in_manufacturer_uid,
+                      uint32_t in_zero_timestamp_period) override;
+    virtual void free(void) override;
+
+    virtual kern_return_t ConfigureHardware(uint64_t usbStreamAddr) LOCALONLY;
+    virtual void PublishUsbTimestamp(uint64_t sampleTime, uint64_t hostTime) LOCALONLY;
+
+    virtual kern_return_t StartIO(IOUserAudioStartStopFlags in_flags) override;
+    virtual kern_return_t StopIO(IOUserAudioStartStopFlags in_flags) override;
+
+    virtual void TimerOccurred(OSAction* action, uint64_t time)
+        TYPE(IOTimerDispatchSource::TimerOccurred);
+};
+
+#endif

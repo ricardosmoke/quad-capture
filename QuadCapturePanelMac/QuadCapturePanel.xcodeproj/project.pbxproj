@@ -1,0 +1,254 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B20000000000000000000031 /* QuadCapturePanelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000041 /* QuadCapturePanelApp.swift */; };
+		B20000000000000000000032 /* PanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000042 /* PanelView.swift */; };
+		B20000000000000000000033 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000043 /* Assets.xcassets */; };
+		B20000000000000000000034 /* InputLevelMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000044 /* InputLevelMonitor.swift */; };
+		B20000000000000000000035 /* PanelModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000045 /* PanelModel.swift */; };
+		B20000000000000000000036 /* HardwareGain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000046 /* HardwareGain.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B20000000000000000000011 /* QuadCapturePanel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuadCapturePanel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000041 /* QuadCapturePanelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuadCapturePanelApp.swift; sourceTree = "<group>"; };
+		B20000000000000000000042 /* PanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelView.swift; sourceTree = "<group>"; };
+		B20000000000000000000043 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B20000000000000000000044 /* InputLevelMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputLevelMonitor.swift; sourceTree = "<group>"; };
+		B20000000000000000000045 /* PanelModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelModel.swift; sourceTree = "<group>"; };
+		B20000000000000000000046 /* HardwareGain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareGain.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B20000000000000000000072 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B20000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000021 /* QuadCapturePanel */,
+				B20000000000000000000022 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B20000000000000000000021 /* QuadCapturePanel */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000041 /* QuadCapturePanelApp.swift */,
+				B20000000000000000000042 /* PanelView.swift */,
+				B20000000000000000000044 /* InputLevelMonitor.swift */,
+				B20000000000000000000045 /* PanelModel.swift */,
+				B20000000000000000000046 /* HardwareGain.swift */,
+				B20000000000000000000043 /* Assets.xcassets */,
+			);
+			path = QuadCapturePanel;
+			sourceTree = "<group>";
+		};
+		B20000000000000000000022 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000011 /* QuadCapturePanel.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B20000000000000000000003 /* QuadCapturePanel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B20000000000000000000083 /* Build configuration list for PBXNativeTarget "QuadCapturePanel" */;
+			buildPhases = (
+				B20000000000000000000071 /* Sources */,
+				B20000000000000000000072 /* Frameworks */,
+				B20000000000000000000073 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QuadCapturePanel;
+			productName = QuadCapturePanel;
+			productReference = B20000000000000000000011 /* QuadCapturePanel.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B20000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					B20000000000000000000003 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = B20000000000000000000081 /* Build configuration list for PBXProject "QuadCapturePanel" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = pt-BR;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				pt-BR,
+			);
+			mainGroup = B20000000000000000000002;
+			productRefGroup = B20000000000000000000022 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B20000000000000000000003 /* QuadCapturePanel */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B20000000000000000000073 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20000000000000000000033 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B20000000000000000000071 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20000000000000000000031 /* QuadCapturePanelApp.swift in Sources */,
+				B20000000000000000000032 /* PanelView.swift in Sources */,
+				B20000000000000000000034 /* InputLevelMonitor.swift in Sources */,
+				B20000000000000000000035 /* PanelModel.swift in Sources */,
+				B20000000000000000000036 /* HardwareGain.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		B20000000000000000000091 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		B20000000000000000000092 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		B20000000000000000000093 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7PX7924N68;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "QUAD-CAPTURE Painel de controle";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Ler os níveis de entrada da QUAD-CAPTURE UA-55.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ua55.QuadCapturePanel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B20000000000000000000094 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7PX7924N68;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "QUAD-CAPTURE Painel de controle";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Ler os níveis de entrada da QUAD-CAPTURE UA-55.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ua55.QuadCapturePanel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B20000000000000000000081 /* Build configuration list for PBXProject "QuadCapturePanel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B20000000000000000000091 /* Debug */,
+				B20000000000000000000092 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B20000000000000000000083 /* Build configuration list for PBXNativeTarget "QuadCapturePanel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B20000000000000000000093 /* Debug */,
+				B20000000000000000000094 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B20000000000000000000001 /* Project object */;
+}

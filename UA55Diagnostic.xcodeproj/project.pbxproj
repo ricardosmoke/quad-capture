@@ -1,0 +1,567 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000031 /* UA55DiagnosticApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000041 /* UA55DiagnosticApp.swift */; };
+		A10000000000000000000032 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000042 /* ContentView.swift */; };
+		A10000000000000000000033 /* DextInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000043 /* DextInstaller.swift */; };
+		A10000000000000000000034 /* UA55AudioDriver.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000058 /* UA55AudioDriver.cpp */; };
+		A10000000000000000000035 /* UA55AudioDriver.iig in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000059 /* UA55AudioDriver.iig */; };
+		A10000000000000000000036 /* UA55DescriptorWalk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004C /* UA55DescriptorWalk.cpp */; };
+		A10000000000000000000037 /* DriverKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004F /* DriverKit.framework */; };
+		A10000000000000000000038 /* USBDriverKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000050 /* USBDriverKit.framework */; };
+		A10000000000000000000039 /* DescriptorWalkTest.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004E /* DescriptorWalkTest.cpp */; };
+		A1000000000000000000003A /* UA55DescriptorWalk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004C /* UA55DescriptorWalk.cpp */; };
+		A1000000000000000000003B /* dev.ua55.UA55DiagnosticApp.driver.dext in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* dev.ua55.UA55DiagnosticApp.driver.dext */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A1000000000000000000003C /* SystemExtensions.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000051 /* SystemExtensions.framework */; };
+		A1000000000000000000003D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000046 /* Assets.xcassets */; };
+		A1000000000000000000003E /* AudioDriverKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005C /* AudioDriverKit.framework */; };
+		A1000000000000000000003F /* UA55AudioDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005A /* UA55AudioDevice.cpp */; };
+		A10000000000000000000040 /* UA55AudioDevice.iig in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005B /* UA55AudioDevice.iig */; };
+		A10000000000000000000090 /* UA55UsbStream.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005D /* UA55UsbStream.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000021 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000003;
+			remoteInfo = UA55DiagnosticDriver;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A10000000000000000000073 /* Embed System Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				A1000000000000000000003B /* dev.ua55.UA55DiagnosticApp.driver.dext in Embed System Extensions */,
+			);
+			name = "Embed System Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000011 /* UA55DiagnosticApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = UA55DiagnosticApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000012 /* dev.ua55.UA55DiagnosticApp.driver.dext */ = {isa = PBXFileReference; explicitFileType = "wrapper.driver-extension"; includeInIndex = 0; path = dev.ua55.UA55DiagnosticApp.driver.dext; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000013 /* UA55DescriptorTests */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = UA55DescriptorTests; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000041 /* UA55DiagnosticApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UA55DiagnosticApp.swift; sourceTree = "<group>"; };
+		A10000000000000000000042 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A10000000000000000000043 /* DextInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DextInstaller.swift; sourceTree = "<group>"; };
+		A10000000000000000000044 /* UA55DiagnosticApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = UA55DiagnosticApp.entitlements; sourceTree = "<group>"; };
+		A10000000000000000000045 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000000000000000000046 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A10000000000000000000049 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1000000000000000000004A /* UA55DiagnosticDriver.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = UA55DiagnosticDriver.entitlements; sourceTree = "<group>"; };
+		A1000000000000000000004B /* UA55DescriptorWalk.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UA55DescriptorWalk.h; sourceTree = "<group>"; };
+		A1000000000000000000004C /* UA55DescriptorWalk.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55DescriptorWalk.cpp; sourceTree = "<group>"; };
+		A1000000000000000000004D /* UA55USBConstants.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UA55USBConstants.h; sourceTree = "<group>"; };
+		A1000000000000000000004E /* DescriptorWalkTest.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = DescriptorWalkTest.cpp; sourceTree = "<group>"; };
+		A1000000000000000000004F /* DriverKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DriverKit.framework; path = System/Library/Frameworks/DriverKit.framework; sourceTree = SDKROOT; };
+		A10000000000000000000050 /* USBDriverKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = USBDriverKit.framework; path = System/Library/Frameworks/USBDriverKit.framework; sourceTree = SDKROOT; };
+		A10000000000000000000051 /* SystemExtensions.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemExtensions.framework; path = System/Library/Frameworks/SystemExtensions.framework; sourceTree = SDKROOT; };
+		A10000000000000000000052 /* UA55Quirks.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UA55Quirks.h; sourceTree = "<group>"; };
+		A10000000000000000000053 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		A10000000000000000000054 /* BUILD.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = BUILD.md; sourceTree = "<group>"; };
+		A10000000000000000000055 /* ENTITLEMENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ENTITLEMENTS.md; sourceTree = "<group>"; };
+		A10000000000000000000056 /* HYPOTHESES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = HYPOTHESES.md; sourceTree = "<group>"; };
+		A10000000000000000000057 /* LINUX_REFERENCE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LINUX_REFERENCE.md; sourceTree = "<group>"; };
+		A10000000000000000000058 /* UA55AudioDriver.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55AudioDriver.cpp; sourceTree = "<group>"; };
+		A10000000000000000000059 /* UA55AudioDriver.iig */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.driverkit; lastKnownFileType = sourcecode.iig; path = UA55AudioDriver.iig; sourceTree = "<group>"; };
+		A1000000000000000000005A /* UA55AudioDevice.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55AudioDevice.cpp; sourceTree = "<group>"; };
+		A1000000000000000000005B /* UA55AudioDevice.iig */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.driverkit; lastKnownFileType = sourcecode.iig; path = UA55AudioDevice.iig; sourceTree = "<group>"; };
+		A1000000000000000000005C /* AudioDriverKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioDriverKit.framework; path = System/Library/Frameworks/AudioDriverKit.framework; sourceTree = SDKROOT; };
+		A1000000000000000000005D /* UA55UsbStream.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55UsbStream.cpp; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000072 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000003C /* SystemExtensions.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000076 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000037 /* DriverKit.framework in Frameworks */,
+				A10000000000000000000038 /* USBDriverKit.framework in Frameworks */,
+				A1000000000000000000003E /* AudioDriverKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000078 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000061 = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000053 /* README.md */,
+				A10000000000000000000062 /* UA55DiagnosticApp */,
+				A10000000000000000000063 /* UA55DiagnosticDriver */,
+				A10000000000000000000064 /* Shared */,
+				A10000000000000000000065 /* Tests */,
+				A10000000000000000000068 /* docs */,
+				A10000000000000000000066 /* Frameworks */,
+				A10000000000000000000067 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000000000000000000062 /* UA55DiagnosticApp */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000041 /* UA55DiagnosticApp.swift */,
+				A10000000000000000000042 /* ContentView.swift */,
+				A10000000000000000000043 /* DextInstaller.swift */,
+				A10000000000000000000045 /* Info.plist */,
+				A10000000000000000000044 /* UA55DiagnosticApp.entitlements */,
+				A10000000000000000000046 /* Assets.xcassets */,
+			);
+			path = UA55DiagnosticApp;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000063 /* UA55DiagnosticDriver */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000059 /* UA55AudioDriver.iig */,
+				A10000000000000000000058 /* UA55AudioDriver.cpp */,
+				A1000000000000000000005B /* UA55AudioDevice.iig */,
+				A1000000000000000000005A /* UA55AudioDevice.cpp */,
+				A1000000000000000000005D /* UA55UsbStream.cpp */,
+				A10000000000000000000049 /* Info.plist */,
+				A1000000000000000000004A /* UA55DiagnosticDriver.entitlements */,
+			);
+			path = UA55DiagnosticDriver;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000064 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000004D /* UA55USBConstants.h */,
+				A10000000000000000000052 /* UA55Quirks.h */,
+				A1000000000000000000004B /* UA55DescriptorWalk.h */,
+				A1000000000000000000004C /* UA55DescriptorWalk.cpp */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000065 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000004E /* DescriptorWalkTest.cpp */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000066 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000004F /* DriverKit.framework */,
+				A10000000000000000000050 /* USBDriverKit.framework */,
+				A1000000000000000000005C /* AudioDriverKit.framework */,
+				A10000000000000000000051 /* SystemExtensions.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000067 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000011 /* UA55DiagnosticApp.app */,
+				A10000000000000000000012 /* dev.ua55.UA55DiagnosticApp.driver.dext */,
+				A10000000000000000000013 /* UA55DescriptorTests */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000068 /* docs */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000054 /* BUILD.md */,
+				A10000000000000000000055 /* ENTITLEMENTS.md */,
+				A10000000000000000000056 /* HYPOTHESES.md */,
+				A10000000000000000000057 /* LINUX_REFERENCE.md */,
+			);
+			path = docs;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000002 /* UA55DiagnosticApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000008A /* Build configuration list for PBXNativeTarget "UA55DiagnosticApp" */;
+			buildPhases = (
+				A10000000000000000000071 /* Sources */,
+				A10000000000000000000072 /* Frameworks */,
+				A10000000000000000000074 /* Resources */,
+				A10000000000000000000073 /* Embed System Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000022 /* PBXTargetDependency */,
+			);
+			name = UA55DiagnosticApp;
+			productName = UA55DiagnosticApp;
+			productReference = A10000000000000000000011 /* UA55DiagnosticApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000003 /* UA55DiagnosticDriver */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000008B /* Build configuration list for PBXNativeTarget "UA55DiagnosticDriver" */;
+			buildPhases = (
+				A10000000000000000000075 /* Sources */,
+				A10000000000000000000076 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = UA55DiagnosticDriver;
+			productName = UA55DiagnosticDriver;
+			productReference = A10000000000000000000012 /* dev.ua55.UA55DiagnosticApp.driver.dext */;
+			productType = "com.apple.product-type.driver-extension";
+		};
+		A10000000000000000000004 /* UA55DescriptorTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000008C /* Build configuration list for PBXNativeTarget "UA55DescriptorTests" */;
+			buildPhases = (
+				A10000000000000000000077 /* Sources */,
+				A10000000000000000000078 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = UA55DescriptorTests;
+			productName = UA55DescriptorTests;
+			productReference = A10000000000000000000013 /* UA55DescriptorTests */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A10000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					A10000000000000000000003 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					A10000000000000000000004 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = A10000000000000000000089 /* Build configuration list for PBXProject "UA55Diagnostic" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "pt-BR";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				"pt-BR",
+				Base,
+			);
+			mainGroup = A10000000000000000000061;
+			productRefGroup = A10000000000000000000067 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000002 /* UA55DiagnosticApp */,
+				A10000000000000000000003 /* UA55DiagnosticDriver */,
+				A10000000000000000000004 /* UA55DescriptorTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000074 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000003D /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000071 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000031 /* UA55DiagnosticApp.swift in Sources */,
+				A10000000000000000000032 /* ContentView.swift in Sources */,
+				A10000000000000000000033 /* DextInstaller.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000075 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000035 /* UA55AudioDriver.iig in Sources */,
+				A10000000000000000000034 /* UA55AudioDriver.cpp in Sources */,
+				A10000000000000000000040 /* UA55AudioDevice.iig in Sources */,
+				A1000000000000000000003F /* UA55AudioDevice.cpp in Sources */,
+				A10000000000000000000090 /* UA55UsbStream.cpp in Sources */,
+				A10000000000000000000036 /* UA55DescriptorWalk.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000077 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000039 /* DescriptorWalkTest.cpp in Sources */,
+				A1000000000000000000003A /* UA55DescriptorWalk.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000022 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000003 /* UA55DiagnosticDriver */;
+			targetProxy = A10000000000000000000021 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A10000000000000000000081 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000082 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A10000000000000000000083 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticApp/UA55DiagnosticApp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 34;
+				DEVELOPMENT_TEAM = 7PX7924N68;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = UA55DiagnosticApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ua55.UA55DiagnosticApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		A10000000000000000000084 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticApp/UA55DiagnosticApp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 34;
+				DEVELOPMENT_TEAM = 7PX7924N68;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = UA55DiagnosticApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ua55.UA55DiagnosticApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		A10000000000000000000085 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticDriver/UA55DiagnosticDriver.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 34;
+				DEVELOPMENT_TEAM = 7PX7924N68;
+				DRIVERKIT_DEPLOYMENT_TARGET = 21.0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"UA55_DRIVER_BUILD=$(CURRENT_PROJECT_VERSION)",
+				);
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Shared",
+					"$(SRCROOT)/UA55DiagnosticDriver",
+				);
+				INFOPLIST_FILE = UA55DiagnosticDriver/Info.plist;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ua55.UA55DiagnosticApp.driver;
+				PRODUCT_NAME = dev.ua55.UA55DiagnosticApp.driver;
+				SDKROOT = driverkit;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		A10000000000000000000086 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticDriver/UA55DiagnosticDriver.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 34;
+				DEVELOPMENT_TEAM = 7PX7924N68;
+				DRIVERKIT_DEPLOYMENT_TARGET = 21.0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"UA55_DRIVER_BUILD=$(CURRENT_PROJECT_VERSION)",
+				);
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Shared",
+					"$(SRCROOT)/UA55DiagnosticDriver",
+				);
+				INFOPLIST_FILE = UA55DiagnosticDriver/Info.plist;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ua55.UA55DiagnosticApp.driver;
+				PRODUCT_NAME = dev.ua55.UA55DiagnosticApp.driver;
+				SDKROOT = driverkit;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		A10000000000000000000087 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 34;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Shared";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ua55.UA55DescriptorTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		A10000000000000000000088 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 34;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Shared";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ua55.UA55DescriptorTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000000000000000000089 /* Build configuration list for PBXProject "UA55Diagnostic" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000081 /* Debug */,
+				A10000000000000000000082 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000008A /* Build configuration list for PBXNativeTarget "UA55DiagnosticApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000083 /* Debug */,
+				A10000000000000000000084 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000008B /* Build configuration list for PBXNativeTarget "UA55DiagnosticDriver" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000085 /* Debug */,
+				A10000000000000000000086 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000008C /* Build configuration list for PBXNativeTarget "UA55DescriptorTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000087 /* Debug */,
+				A10000000000000000000088 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000001 /* Project object */;
+}

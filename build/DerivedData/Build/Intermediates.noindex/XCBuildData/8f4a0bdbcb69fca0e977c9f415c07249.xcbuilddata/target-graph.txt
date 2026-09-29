@@ -1,0 +1,5 @@
+Target dependency graph (3 targets)
+Target 'UA55DescriptorTests' in project 'UA55Diagnostic' (no dependencies)
+Target 'UA55DiagnosticApp' in project 'UA55Diagnostic'
+➜ Explicit dependency on target 'UA55DiagnosticDriver' in project 'UA55Diagnostic'
+Target 'UA55DiagnosticDriver' in project 'UA55Diagnostic' (no dependencies)

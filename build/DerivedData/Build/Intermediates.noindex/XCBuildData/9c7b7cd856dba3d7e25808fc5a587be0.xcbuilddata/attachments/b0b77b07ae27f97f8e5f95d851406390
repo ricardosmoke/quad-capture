@@ -1,0 +1,49 @@
+{
+  "" : {
+    "diagnostics" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp-primary.dia",
+    "emit-module-dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp-primary-emit-module.dia",
+    "pch" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp-primary.swiftdeps"
+  },
+  "/Users/ricardo/Documents/DriverRoland/UA55DiagnosticApp/ContentView.swift" : {
+    "const-values" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/ContentView.dia",
+    "index-unit-output-path" : "/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/ContentView.swiftdeps",
+    "swiftmodule" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/ContentView~partial.swiftmodule"
+  },
+  "/Users/ricardo/Documents/DriverRoland/UA55DiagnosticApp/DextInstaller.swift" : {
+    "const-values" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/DextInstaller.swiftconstvalues",
+    "dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/DextInstaller.d",
+    "diagnostics" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/DextInstaller.dia",
+    "index-unit-output-path" : "/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/DextInstaller.o",
+    "llvm-bc" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/DextInstaller.bc",
+    "object" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/DextInstaller.o",
+    "swift-dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/DextInstaller.swiftdeps",
+    "swiftmodule" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/DextInstaller~partial.swiftmodule"
+  },
+  "/Users/ricardo/Documents/DriverRoland/UA55DiagnosticApp/UA55DiagnosticApp.swift" : {
+    "const-values" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp.swiftconstvalues",
+    "dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp.d",
+    "diagnostics" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp.dia",
+    "index-unit-output-path" : "/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp.o",
+    "llvm-bc" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp.bc",
+    "object" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp.o",
+    "swift-dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp.swiftdeps",
+    "swiftmodule" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/UA55DiagnosticApp~partial.swiftmodule"
+  },
+  "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/ricardo/Documents/DriverRoland/build/DerivedData/Build/Intermediates.noindex/UA55Diagnostic.build/Debug/UA55DiagnosticApp.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  }
+}

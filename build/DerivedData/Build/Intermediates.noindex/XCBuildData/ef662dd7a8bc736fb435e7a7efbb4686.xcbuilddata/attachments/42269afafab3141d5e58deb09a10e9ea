@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.application-identifier</key>
+	<string>7PX7924N68.dev.ua55.UA55DiagnosticApp</string>
+	<key>com.apple.developer.system-extension.install</key>
+	<true/>
+	<key>com.apple.developer.team-identifier</key>
+	<string>7PX7924N68</string>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.get-task-allow</key>
+	<true/>
+</dict>
+</plist>
