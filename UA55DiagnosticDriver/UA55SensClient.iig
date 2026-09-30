@@ -1,0 +1,16 @@
+#ifndef UA55SensClient_h
+#define UA55SensClient_h
+
+#include <DriverKit/IOUserClient.iig>
+
+class UA55SensClient: public IOUserClient
+{
+public:
+    virtual kern_return_t ExternalMethod(uint64_t selector,
+                                         IOUserClientMethodArguments* arguments,
+                                         const IOUserClientMethodDispatch* dispatch,
+                                         OSObject* target,
+                                         void* reference) override;
+};
+
+#endif

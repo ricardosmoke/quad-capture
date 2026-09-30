@@ -26,3 +26,4 @@ id_ed25519.pub
 
 # Local scratch
 tmp_audio_analysis/
+logs/

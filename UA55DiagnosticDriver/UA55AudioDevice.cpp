@@ -560,12 +560,25 @@ kern_return_t UA55AudioDevice::PerformDeviceConfigurationChange(uint64_t in_chan
 
 kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
 {
+    if (ivars == nullptr || ivars->workQueue.get() == nullptr) {
+        return kIOReturnNotReady;
+    }
+    // StartIO do segundo cliente (painel) chega já nesta fila. DispatchSync nela
+    // mesma não retorna: a música para no StopIO anterior e o painel fica preso.
+    if (!ivars->workQueue->OnQueue()) {
+        __block kern_return_t hopped = kIOReturnSuccess;
+        ivars->workQueue->DispatchSync(^{
+            hopped = StartIO(in_flags);
+        });
+        return hopped;
+    }
+
     __block kern_return_t error = kIOReturnSuccess;
     __block OSSharedPtr<IOMemoryDescriptor> outputMD;
     __block OSSharedPtr<IOMemoryDescriptor> inputMD;
     __block bool startedUsbThisCall = false;
 
-    ivars->workQueue->DispatchSync(^() {
+    {
         float* outAddr = nullptr;
         float* inAddr = nullptr;
         uint32_t outCh = kUA55OutputChannels;
@@ -576,7 +589,7 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
 
         error = super::StartIO(in_flags);
         if (error != kIOReturnSuccess) {
-            return;
+            return error;
         }
 
         outputMD = ivars->outputStream->GetIOMemoryDescriptor();
@@ -624,7 +637,7 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
         if (ivars->rateChangeInFlight) {
             ivars->ioRunning = true;
             os_log(OS_LOG_DEFAULT, "[UA55] StartIO during rate change — USB stays idle");
-            return;
+            return kIOReturnSuccess;
         }
 
         if (ivars->usbStream != nullptr) {
@@ -634,17 +647,8 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
                 goto Failure;
             }
             startedUsbThisCall = !alreadyStreaming;
-
-            if (alreadyStreaming) {
-                const uint64_t aligned =
-                    (ivars->usbStream->CurrentCaptureSample() / kUA55ZeroTimestampPeriod)
-                    * kUA55ZeroTimestampPeriod;
-                if (aligned > 0) {
-                    ivars->sampleTime = aligned;
-                    ivars->lastPublishedZts = aligned;
-                    UpdateCurrentZeroTimestamp(aligned, mach_absolute_time());
-                }
-            }
+            // USB já no ar: não republicar o ZTS daqui. O HAL ainda está dentro
+            // deste StartIO, e UpdateCurrentZeroTimestamp espera o HAL.
         }
 
         ivars->ioRunning = true;
@@ -655,7 +659,7 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
                kUA55HalRingFrames,
                kUA55ZeroTimestampPeriod,
                alreadyStreaming ? 1 : 0);
-        return;
+        return error;
 
     Failure:
         ivars->ioRunning = false;
@@ -669,26 +673,31 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
         ivars->inputMap.reset();
         super::StopIO(in_flags);
         os_log(OS_LOG_DEFAULT, "[UA55] StartIO failed 0x%08x", (unsigned int)error);
-    });
-
-    return error;
+        return error;
+    }
 }
 
 kern_return_t UA55AudioDevice::StopIO(IOUserAudioStartStopFlags in_flags)
 {
-    __block kern_return_t error = kIOReturnSuccess;
+    if (ivars == nullptr || ivars->workQueue.get() == nullptr) {
+        return kIOReturnNotReady;
+    }
+    if (!ivars->workQueue->OnQueue()) {
+        __block kern_return_t hopped = kIOReturnSuccess;
+        ivars->workQueue->DispatchSync(^{
+            hopped = StopIO(in_flags);
+        });
+        return hopped;
+    }
 
-    ivars->workQueue->DispatchSync(^() {
-        ivars->ioRunning = false;
-        if (ivars->usbStream != nullptr) {
-            ivars->usbStream->ClearTimestampTarget();
-        }
-        ivars->outputMap.reset();
-        ivars->inputMap.reset();
-        error = super::StopIO(in_flags);
-        os_log(OS_LOG_DEFAULT, "[UA55] StopIO (HAL only, USB kept) status=0x%08x",
-               (unsigned int)error);
-    });
-
+    ivars->ioRunning = false;
+    if (ivars->usbStream != nullptr) {
+        ivars->usbStream->ClearTimestampTarget();
+    }
+    ivars->outputMap.reset();
+    ivars->inputMap.reset();
+    const kern_return_t error = super::StopIO(in_flags);
+    os_log(OS_LOG_DEFAULT, "[UA55] StopIO (HAL only, USB kept) status=0x%08x",
+           (unsigned int)error);
     return error;
 }

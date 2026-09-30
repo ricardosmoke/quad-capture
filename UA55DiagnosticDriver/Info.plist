@@ -45,6 +45,13 @@
 				<key>IOUserClass</key>
 				<string>IOUserAudioDriverUserClient</string>
 			</dict>
+			<key>UA55SensUserClientProperties</key>
+			<dict>
+				<key>IOClass</key>
+				<string>IOUserUserClient</string>
+				<key>IOUserClass</key>
+				<string>UA55SensClient</string>
+			</dict>
 			<key>idProduct</key>
 			<integer>303</integer>
 			<key>idVendor</key>

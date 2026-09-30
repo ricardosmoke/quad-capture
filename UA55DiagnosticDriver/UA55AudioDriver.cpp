@@ -222,6 +222,44 @@ kern_return_t UA55AudioDriver::Start_Impl(IOService* provider)
     return kIOReturnSuccess;
 }
 
+kern_return_t UA55AudioDriver::NewUserClient_Impl(uint32_t type, IOUserClient** userClient)
+{
+    if (type != kUA55SensUserClientType) {
+        return NewUserClient(type, userClient, SUPERDISPATCH);
+    }
+    if (userClient == nullptr) {
+        return kIOReturnBadArgument;
+    }
+    IOService* service = nullptr;
+    const kern_return_t created = Create(this, "UA55SensUserClientProperties", &service);
+    if (created != kIOReturnSuccess || service == nullptr) {
+        os_log(OS_LOG_DEFAULT, "[UA55] sens user client create failed 0x%08x", (unsigned int)created);
+        OSSafeReleaseNULL(service);
+        return created != kIOReturnSuccess ? created : kIOReturnNoMemory;
+    }
+    *userClient = OSDynamicCast(IOUserClient, service);
+    if (*userClient == nullptr) {
+        OSSafeReleaseNULL(service);
+        return kIOReturnUnsupported;
+    }
+    os_log(OS_LOG_DEFAULT, "[UA55] sens user client opened");
+    return kIOReturnSuccess;
+}
+
+void UA55AudioDriver::CopyHardwareSens(uint8_t* left, uint8_t* right)
+{
+    if (ivars != nullptr && ivars->usbStream != nullptr) {
+        ivars->usbStream->CopySens(left, right);
+        return;
+    }
+    if (left != nullptr) {
+        *left = 255;
+    }
+    if (right != nullptr) {
+        *right = 255;
+    }
+}
+
 kern_return_t UA55AudioDriver::Stop_Impl(IOService* provider)
 {
     os_log(OS_LOG_DEFAULT, "[UA55] Stop");

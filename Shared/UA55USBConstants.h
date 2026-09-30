@@ -10,7 +10,7 @@ static const uint16_t kUA55ProductID = 0x012F;
 
 // Deve coincidir com CURRENT_PROJECT_VERSION no Xcode (log ao plugar).
 #ifndef UA55_DRIVER_BUILD
-#define UA55_DRIVER_BUILD 49
+#define UA55_DRIVER_BUILD 54
 #endif
 static const uint32_t kUA55DriverBuild = UA55_DRIVER_BUILD;
 
@@ -49,6 +49,10 @@ static const uint32_t kUA55MidiInSlotCount = 4;
 // O mixer/painel Roland Capture fala por MIDI SysEx no IF2 — drenar 0x86.
 static const bool kUA55StatusInterruptDrainEnabled = false;
 static const bool kUA55MidiDrainEnabled = true;
+
+// User client só de leitura do ganho. Não passa pelo Core Audio.
+// A placa empurra DT1 quando o knob muda; não se pede RQ1 (isso derrubou a dext).
+static const uint32_t kUA55SensUserClientType = 0x55u;
 
 // Probe isoc sync (marco 2): 8 microframes HS (~1 ms com bInterval=1).
 static const uint32_t kUA55IsochProbeFrameCount = 8;

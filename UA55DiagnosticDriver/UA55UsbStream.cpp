@@ -1,4 +1,5 @@
 #include <os/log.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <DriverKit/IOLib.h>
@@ -1300,6 +1301,7 @@ void UA55UsbStream::OnMidiInComplete(uint32_t slotIndex, IOReturn statusCode, ui
                 slot->dataBuffer->GetAddressRange(&range) == kIOReturnSuccess &&
                 range.address != 0) {
                 const uint8_t* bytes = reinterpret_cast<const uint8_t*>(range.address);
+                IngestMidiBytes(bytes, actualByteCount);
                 // Log primeiros pacotes e depois esparsos — útil ao girar knobs.
                 if (midiCompletions_ <= 30 || (midiCompletions_ % 25) == 0) {
                     os_log(OS_LOG_DEFAULT,
@@ -1329,6 +1331,153 @@ void UA55UsbStream::OnMidiInComplete(uint32_t slotIndex, IOReturn statusCode, ui
     }
 }
 
+void UA55UsbStream::SetSensListener(void* context, void (*listener)(void* context, uint8_t channel, uint8_t db))
+{
+    sensContext_ = context;
+    sensListener_ = listener;
+}
+
+void UA55UsbStream::CopySens(uint8_t* left, uint8_t* right) const
+{
+    if (left != nullptr) {
+        *left = sensDb_[0];
+    }
+    if (right != nullptr) {
+        *right = sensDb_[1];
+    }
+}
+
+void UA55UsbStream::IngestMidiBytes(const uint8_t* bytes, uint32_t length)
+{
+    if (bytes == nullptr || length < 4) {
+        return;
+    }
+    for (uint32_t offset = 0; offset + 4 <= length; offset += 4) {
+        const uint8_t cin = bytes[offset] & 0x0F;
+        const uint8_t* data = bytes + offset + 1;
+        uint8_t count = 0;
+        if (cin == 0x4) {
+            count = 3;
+        } else if (cin == 0x5) {
+            count = 1;
+        } else if (cin == 0x6) {
+            count = 2;
+        } else if (cin == 0x7) {
+            count = 3;
+        } else if (cin >= 0x2 && cin <= 0x3) {
+            count = (cin == 0x2) ? 2 : 3;
+            NoteDeviceMessage("midi", data, count);
+            continue;
+        } else if (cin >= 0x8 && cin <= 0xE) {
+            count = (cin == 0xC || cin == 0xD) ? 2 : 3;
+            NoteDeviceMessage("midi", data, count);
+            continue;
+        } else {
+            continue;
+        }
+        for (uint8_t index = 0; index < count; index++) {
+            const uint8_t value = data[index];
+            if (value == 0xF0) {
+                sysexLen_ = 0;
+                sysexOpen_ = true;
+            }
+            if (!sysexOpen_) {
+                continue;
+            }
+            if (sysexLen_ >= sizeof(sysex_)) {
+                sysexOpen_ = false;
+                sysexLen_ = 0;
+                continue;
+            }
+            sysex_[sysexLen_++] = value;
+            if (value == 0xF7) {
+                HandleSysEx(sysex_, sysexLen_);
+                sysexOpen_ = false;
+                sysexLen_ = 0;
+            }
+        }
+    }
+}
+
+void UA55UsbStream::HandleSysEx(const uint8_t* msg, uint32_t length)
+{
+    // F0 41 <dev> 00 00 56 12 <addr 4> <data...> <csum> F7
+    if (msg == nullptr || length < 14 || msg[0] != 0xF0 || msg[length - 1] != 0xF7) {
+        return;
+    }
+    if (msg[1] != 0x41 || msg[3] != 0x00 || msg[4] != 0x00 || msg[5] != 0x56 || msg[6] != 0x12) {
+        return;
+    }
+    uint32_t sum = 0;
+    for (uint32_t index = 7; index + 2 < length; index++) {
+        sum += msg[index];
+    }
+    const uint8_t expect = (uint8_t)((0x80 - (sum & 0x7F)) & 0x7F);
+    if (msg[length - 2] != expect) {
+        return;
+    }
+    const uint8_t* addr = msg + 7;
+    const uint8_t data = msg[11];
+    const uint32_t dataBytes = length - 13;
+    // 00 05 <canal> 04 = SENS daquele preamp. O byte vai de 0 a 127
+    // (máximo de um byte MIDI); acima de 54 continua o mesmo ganho.
+    // Qualquer outro DT1 é o estado da placa (AUTO SENS inclusive). Só se escuta.
+    const bool sens = dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x05 && addr[3] == 0x04
+        && addr[2] <= 1 && data <= 127;
+    if (!sens) {
+        uint8_t packed[12] = {};
+        const uint32_t copyData = dataBytes > 8 ? 8 : dataBytes;
+        memcpy(packed, addr, 4);
+        if (copyData > 0) {
+            memcpy(packed + 4, msg + 11, copyData);
+        }
+        NoteDeviceMessage("dt1", packed, 4 + copyData);
+        return;
+    }
+    const uint8_t channel = addr[2];
+    if (sensDb_[channel] == data) {
+        return;
+    }
+    sensDb_[channel] = data;
+    os_log(OS_LOG_DEFAULT, "[UA55] sens %u = %u dB", channel + 1, data);
+    if (sensListener_ != nullptr) {
+        sensListener_(sensContext_, channel, data);
+    }
+}
+
+void UA55UsbStream::NoteDeviceMessage(const char* tag, const uint8_t* bytes, uint32_t length)
+{
+    if (tag == nullptr || bytes == nullptr || length == 0) {
+        return;
+    }
+    if (length > 12) {
+        length = 12;
+    }
+    for (uint32_t index = 0; index < 16; index++) {
+        SeenDeviceMessage* slot = &seenMessage_[index];
+        if (slot->used && slot->length == length && memcmp(slot->bytes, bytes, length) == 0) {
+            return;
+        }
+    }
+    SeenDeviceMessage* stored = &seenMessage_[seenMessageNext_];
+    seenMessageNext_ = (uint8_t)((seenMessageNext_ + 1) % 16);
+    memset(stored, 0, sizeof(*stored));
+    memcpy(stored->bytes, bytes, length);
+    stored->length = (uint8_t)length;
+    stored->used = true;
+
+    char hex[40];
+    uint32_t used = 0;
+    for (uint32_t index = 0; index < length && used + 3 < sizeof(hex); index++) {
+        const int wrote = snprintf(hex + used, sizeof(hex) - used, "%02x", bytes[index]);
+        if (wrote < 0) {
+            return;
+        }
+        used += (uint32_t)wrote;
+    }
+    os_log(OS_LOG_DEFAULT, "[UA55] %{public}s %{public}s", tag, hex);
+}
+
 void UA55UsbStream::TearDownMidiPipe(IOService* closer)
 {
     StopMidiPolling();
@@ -1351,6 +1500,8 @@ void UA55UsbStream::TearDownMidiPipe(IOService* closer)
     midiCompletions_ = 0;
     midiBytes_ = 0;
     midiErrors_ = 0;
+    sysexOpen_ = false;
+    sysexLen_ = 0;
 }
 
 void UA55UsbStream::TearDownStatusPipes(IOService* closer)

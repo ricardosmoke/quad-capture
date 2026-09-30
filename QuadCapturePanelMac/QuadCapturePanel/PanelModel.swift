@@ -20,8 +20,9 @@ final class PanelModel: ObservableObject {
         var connected: Bool = false
         var sens1: Double = 0.72
         var sens2: Double = 0.55
-        var sens1Text: String = "32.4"
-        var sens2Text: String = "24.8"
+        var sens1Text: String = "—"
+        var sens2Text: String = "—"
+        var autoSensText: String = "—"
         var comp1 = CompStrip()
         var comp2 = CompStrip()
         var mixOutput: Double = 0.7
@@ -42,8 +43,11 @@ final class PanelModel: ObservableObject {
         var mixerOutPeak: CGFloat = 0
     }
 
-    @Published var sens1: Double = HardwareGain.normalized(fromDb: 32)
-    @Published var sens2: Double = HardwareGain.normalized(fromDb: 24)
+    @Published var sens1: Double = 0
+    @Published var sens2: Double = 0
+    private var sens1Known = false
+    private var sens2Known = false
+    @Published var autoSensText: String = "—"
     @Published var comp1 = CompStrip()
     @Published var comp2 = CompStrip()
     @Published var mixOutput: Double = 0.7
@@ -54,6 +58,7 @@ final class PanelModel: ObservableObject {
 
     private let monitor = InputLevelMonitor()
     private var cancellable: Timer?
+    private var sensBusy = false
 
     var drawState: DrawState {
         var s = DrawState()
@@ -61,8 +66,9 @@ final class PanelModel: ObservableObject {
         s.connected = levels.connected
         s.sens1 = sens1
         s.sens2 = sens2
-        s.sens1Text = String(format: "%.0f", Double(HardwareGain.db(fromNormalized: sens1)))
-        s.sens2Text = String(format: "%.0f", Double(HardwareGain.db(fromNormalized: sens2)))
+        s.sens1Text = sens1Known ? String(HardwareGain.db(fromNormalized: sens1)) : "—"
+        s.sens2Text = sens2Known ? String(HardwareGain.db(fromNormalized: sens2)) : "—"
+        s.autoSensText = autoSensText
         s.comp1 = comp1
         s.comp2 = comp2
         s.mixOutput = mixOutput
@@ -85,11 +91,27 @@ final class PanelModel: ObservableObject {
     }
 
     func start() {
+        PanelLog.write("PanelModel.start")
         monitor.start()
+        HardwareGain.start()
         cancellable = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.levels = self.monitor.snapshot
+                guard !self.sensBusy else { return }
+                self.sensBusy = true
+                PanelWork.queue.async { [weak self] in
+                    let reading = PanelLog.measure("readSens") { HardwareGain.readSens() }
+                    let device = HardwareGain.deviceText()
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.sensBusy = false
+                        self.applyHardwareSens(reading)
+                        if device != self.autoSensText {
+                            self.autoSensText = device
+                        }
+                    }
+                }
             }
         }
     }
@@ -97,7 +119,20 @@ final class PanelModel: ObservableObject {
     func stop() {
         cancellable?.invalidate()
         cancellable = nil
+        HardwareGain.stop()
         monitor.stop()
+    }
+
+    private func applyHardwareSens(_ reading: (Int, Int)?) {
+        guard let reading else { return }
+        if reading.0 <= Int(HardwareGain.sensMaxDb) {
+            sens1 = HardwareGain.normalized(fromDb: reading.0)
+            sens1Known = true
+        }
+        if reading.1 <= Int(HardwareGain.sensMaxDb) {
+            sens2 = HardwareGain.normalized(fromDb: reading.1)
+            sens2Known = true
+        }
     }
 
     nonisolated static func knobAngle(_ value: Double) -> CGFloat {

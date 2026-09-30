@@ -49,6 +49,11 @@ public:
     void SetOutputPairMuted(uint32_t pair, bool muted);
     void SetOutputMasterMuted(bool muted);
 
+    // Chamado no fio USB quando chega DT1 de SENS. Sem MIDI OUT.
+    void SetSensListener(void* context, void (*listener)(void* context, uint8_t channel, uint8_t db));
+    // 255 = esse canal ainda não chegou. Leitura lock-free para o user client.
+    void CopySens(uint8_t* left, uint8_t* right) const;
+
     kern_return_t SubmitCaptureSlot(uint32_t slotIndex);
     kern_return_t SubmitPlaybackSlot(uint32_t slotIndex);
     void OnCaptureComplete(uint32_t slotIndex, IOReturn status);
@@ -179,6 +184,24 @@ private:
     kern_return_t StartMidiPolling();
     void StopMidiPolling();
     kern_return_t SubmitMidiInSlot(uint32_t slotIndex);
+    void IngestMidiBytes(const uint8_t* bytes, uint32_t length);
+    void HandleSysEx(const uint8_t* msg, uint32_t length);
+    void NoteDeviceMessage(const char* tag, const uint8_t* bytes, uint32_t length);
+
+    void* sensContext_ = nullptr;
+    void (*sensListener_)(void* context, uint8_t channel, uint8_t db) = nullptr;
+    uint8_t sysex_[256] = {};
+    uint16_t sysexLen_ = 0;
+    bool sysexOpen_ = false;
+    uint8_t sensDb_[2] = { 255, 255 };
+    // Mensagens já anunciadas. Repetir a mesma não gera outra linha.
+    struct SeenDeviceMessage {
+        uint8_t bytes[12];
+        uint8_t length;
+        bool used;
+    };
+    SeenDeviceMessage seenMessage_[16] = {};
+    uint8_t seenMessageNext_ = 0;
 
     static inline int32_t FloatToS24In32(float sample)
     {

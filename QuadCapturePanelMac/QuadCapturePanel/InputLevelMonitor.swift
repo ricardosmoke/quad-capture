@@ -31,9 +31,11 @@ final class LevelCaptureEngine: @unchecked Sendable {
 
     func stop() {
         if let unit = audioUnit {
-            AudioOutputUnitStop(unit)
-            AudioUnitUninitialize(unit)
-            AudioComponentInstanceDispose(unit)
+            PanelLog.measure("AudioOutputUnitStop") {
+                AudioOutputUnitStop(unit)
+                AudioUnitUninitialize(unit)
+                AudioComponentInstanceDispose(unit)
+            }
         }
         audioUnit = nil
         callbackContext = nil
@@ -53,31 +55,41 @@ final class LevelCaptureEngine: @unchecked Sendable {
         }
 
         var unit: AudioUnit?
-        var status = AudioComponentInstanceNew(component, &unit)
+        var status = PanelLog.measure("AudioComponentInstanceNew") {
+            AudioComponentInstanceNew(component, &unit)
+        }
         guard status == noErr, let unit else { throw LevelMonitorError.osStatus(status) }
 
         var enable: UInt32 = 1
         var disable: UInt32 = 0
-        status = AudioUnitSetProperty(
-            unit, kAudioOutputUnitProperty_EnableIO,
-            kAudioUnitScope_Input, 1, &enable, UInt32(MemoryLayout<UInt32>.size))
+        status = PanelLog.measure("EnableIO input") {
+            AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_EnableIO,
+                kAudioUnitScope_Input, 1, &enable, UInt32(MemoryLayout<UInt32>.size))
+        }
         guard status == noErr else { throw LevelMonitorError.osStatus(status) }
-        status = AudioUnitSetProperty(
-            unit, kAudioOutputUnitProperty_EnableIO,
-            kAudioUnitScope_Output, 0, &disable, UInt32(MemoryLayout<UInt32>.size))
+        status = PanelLog.measure("EnableIO output off") {
+            AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_EnableIO,
+                kAudioUnitScope_Output, 0, &disable, UInt32(MemoryLayout<UInt32>.size))
+        }
         guard status == noErr else { throw LevelMonitorError.osStatus(status) }
 
         var device = deviceID
-        status = AudioUnitSetProperty(
-            unit, kAudioOutputUnitProperty_CurrentDevice,
-            kAudioUnitScope_Global, 0, &device, UInt32(MemoryLayout<AudioDeviceID>.size))
+        status = PanelLog.measure("CurrentDevice \(deviceID)") {
+            AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global, 0, &device, UInt32(MemoryLayout<AudioDeviceID>.size))
+        }
         guard status == noErr else { throw LevelMonitorError.osStatus(status) }
 
         var asbd = AudioStreamBasicDescription()
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-        status = AudioUnitGetProperty(
-            unit, kAudioUnitProperty_StreamFormat,
-            kAudioUnitScope_Input, 1, &asbd, &size)
+        status = PanelLog.measure("Get StreamFormat") {
+            AudioUnitGetProperty(
+                unit, kAudioUnitProperty_StreamFormat,
+                kAudioUnitScope_Input, 1, &asbd, &size)
+        }
         guard status == noErr else { throw LevelMonitorError.osStatus(status) }
 
         let channelCount = max(1, min(Self.maxChannels, Int(asbd.mChannelsPerFrame)))
@@ -92,10 +104,12 @@ final class LevelCaptureEngine: @unchecked Sendable {
         asbd.mBytesPerPacket = 4
         asbd.mChannelsPerFrame = UInt32(channelCount)
 
-        status = AudioUnitSetProperty(
-            unit, kAudioUnitProperty_StreamFormat,
-            kAudioUnitScope_Output, 1, &asbd,
-            UInt32(MemoryLayout<AudioStreamBasicDescription>.size))
+        status = PanelLog.measure("Set StreamFormat ch=\(channelCount)") {
+            AudioUnitSetProperty(
+                unit, kAudioUnitProperty_StreamFormat,
+                kAudioUnitScope_Output, 1, &asbd,
+                UInt32(MemoryLayout<AudioStreamBasicDescription>.size))
+        }
         guard status == noErr else { throw LevelMonitorError.osStatus(status) }
 
         let context = CallbackContext(engine: self, channelCount: channelCount)
@@ -104,15 +118,21 @@ final class LevelCaptureEngine: @unchecked Sendable {
         var callback = AURenderCallbackStruct(
             inputProc: inputRenderCallback,
             inputProcRefCon: Unmanaged.passUnretained(context).toOpaque())
-        status = AudioUnitSetProperty(
-            unit, kAudioOutputUnitProperty_SetInputCallback,
-            kAudioUnitScope_Global, 0, &callback,
-            UInt32(MemoryLayout<AURenderCallbackStruct>.size))
+        status = PanelLog.measure("SetInputCallback") {
+            AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_SetInputCallback,
+                kAudioUnitScope_Global, 0, &callback,
+                UInt32(MemoryLayout<AURenderCallbackStruct>.size))
+        }
         guard status == noErr else { throw LevelMonitorError.osStatus(status) }
 
-        status = AudioUnitInitialize(unit)
+        status = PanelLog.measure("AudioUnitInitialize") {
+            AudioUnitInitialize(unit)
+        }
         guard status == noErr else { throw LevelMonitorError.osStatus(status) }
-        status = AudioOutputUnitStart(unit)
+        status = PanelLog.measure("AudioOutputUnitStart") {
+            AudioOutputUnitStart(unit)
+        }
         guard status == noErr else { throw LevelMonitorError.osStatus(status) }
 
         audioUnit = unit
@@ -160,11 +180,12 @@ final class InputLevelMonitor: ObservableObject {
     private var scanTimer: Timer?
     private var hold = [Float](repeating: 0, count: LevelCaptureEngine.maxChannels)
     private var running = false
+    private var openInFlight = false
 
     func start() {
         guard !running else { return }
         running = true
-        refreshDeviceAndStart()
+        scheduleOpen(reason: "start")
         uiTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -179,14 +200,54 @@ final class InputLevelMonitor: ObservableObject {
         uiTimer = nil
         scanTimer?.invalidate()
         scanTimer = nil
-        engine.stop()
+        let engine = engine
+        PanelWork.queue.async {
+            PanelLog.measure("engine.stop [panel]") { engine.stop() }
+        }
         snapshot = Snapshot(status: "Parado")
     }
 
     private func ensureRunning() {
-        guard running else { return }
-        if engine.audioUnit == nil || UA55Device.find() == nil {
-            refreshDeviceAndStart()
+        guard running, !openInFlight, engine.audioUnit == nil else { return }
+        scheduleOpen(reason: "rescan")
+    }
+
+    private func scheduleOpen(reason: String) {
+        guard !openInFlight else { return }
+        openInFlight = true
+        let engine = engine
+        PanelWork.queue.async {
+            let result = Self.openOffMain(engine, reason: reason)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.openInFlight = false
+                guard self.running else { return }
+                self.snapshot.connected = result.connected
+                self.snapshot.status = result.status
+            }
+        }
+    }
+
+    private struct OpenResult: Sendable {
+        var connected: Bool
+        var status: String
+    }
+
+    private nonisolated static func openOffMain(_ engine: LevelCaptureEngine, reason: String) -> OpenResult {
+        PanelLog.measure("engine.stop [\(reason)]") { engine.stop() }
+        guard let id = PanelLog.measure("find device [\(reason)]", { UA55Device.find() }) else {
+            return OpenResult(connected: false, status: "QUAD-CAPTURE não encontrada")
+        }
+        do {
+            try PanelLog.measure("engine.start id=\(id) [\(reason)]") {
+                try engine.start(deviceID: id)
+            }
+            let name = UA55Device.name(id) ?? "UA-55"
+            PanelLog.write("input open ok \(name)")
+            return OpenResult(connected: true, status: "Entrada ao vivo · \(name)")
+        } catch {
+            PanelLog.write("input open failed \(error.localizedDescription)")
+            return OpenResult(connected: false, status: "Falha ao abrir entrada: \(error.localizedDescription)")
         }
     }
 
@@ -208,24 +269,6 @@ final class InputLevelMonitor: ObservableObject {
         guard peak > 0.000_001 else { return 0 }
         let db = 20 * log10(peak)
         return CGFloat(min(1, max(0, (db + 48) / 48)))
-    }
-
-    private func refreshDeviceAndStart() {
-        engine.stop()
-        guard let found = UA55Device.find() else {
-            snapshot.connected = false
-            snapshot.status = "QUAD-CAPTURE não encontrada"
-            return
-        }
-        do {
-            try engine.start(deviceID: found)
-            snapshot.connected = true
-            let name = UA55Device.name(found) ?? "UA-55"
-            snapshot.status = "Entrada ao vivo · \(name)"
-        } catch {
-            snapshot.connected = false
-            snapshot.status = "Falha ao abrir entrada: \(error.localizedDescription)"
-        }
     }
 }
 

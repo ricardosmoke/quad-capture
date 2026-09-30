@@ -14,7 +14,7 @@ struct PanelView: View {
                 }
                 .background(PanelCanvas.metalDark)
 
-                ForEach(PanelLayout.knobs, id: \.id) { knob in
+                ForEach(PanelLayout.knobs.filter(\.interactive), id: \.id) { knob in
                     KnobHandle(
                         value: model.binding(for: knob.id),
                         frame: layout.viewRect(for: knob.hit))
@@ -22,12 +22,15 @@ struct PanelView: View {
             }
         }
         .onAppear {
-            // Adiar IO de áudio para a janela pintar primeiro.
+            PanelLog.write("window appear pid=\(ProcessInfo.processInfo.processIdentifier)")
             DispatchQueue.main.async {
                 model.start()
             }
         }
-        .onDisappear { model.stop() }
+        .onDisappear {
+            PanelLog.write("window disappear")
+            model.stop()
+        }
     }
 }
 
@@ -39,6 +42,7 @@ struct KnobSpec {
     let cx: CGFloat
     let cy: CGFloat
     let radius: CGFloat
+    var interactive: Bool = true
     var hit: CGRect {
         CGRect(x: cx - radius - 10, y: cy - radius - 10, width: (radius + 10) * 2, height: (radius + 10) * 2)
     }
@@ -63,9 +67,9 @@ struct PanelLayout {
 
     /// Posições dos knobs alinhadas ao Canvas.
     static let knobs: [KnobSpec] = [
-        // PREAMP SENS — espelha leitura da placa (build ≥36); arraste só local por agora.
-        KnobSpec(id: .sens1, cx: 8 + 72, cy: 64 + 40 + 124, radius: 22),
-        KnobSpec(id: .sens2, cx: 8 + 72, cy: 64 + 286 + 124, radius: 22),
+        // SENS vem do knob físico. Sem arraste: o painel só mostra a leitura.
+        KnobSpec(id: .sens1, cx: 8 + 72, cy: 64 + 40 + 124, radius: 22, interactive: false),
+        KnobSpec(id: .sens2, cx: 8 + 72, cy: 64 + 286 + 124, radius: 22, interactive: false),
         // COMP 1
         KnobSpec(id: .comp1Gate, cx: 292 + 36 + 0 * 76, cy: 104 + 164, radius: 18),
         KnobSpec(id: .comp1Threshold, cx: 292 + 36 + 1 * 76, cy: 104 + 164, radius: 18),
@@ -208,7 +212,10 @@ enum PanelCanvas {
         channel(
             &context, x + 8, y + 40, "1", state.sens1Text, PanelModel.knobAngle(state.sens1),
             level: state.pre1, peak: state.pre1Peak)
-        button(&context, x + 168, y + 250, 86, 28, "AUTO SENS", gray: true)
+        button(
+            &context, x + 160, y + 244, 96, 40,
+            "AUTO SENS", caption: PanelCanvas.spacedHex(state.autoSensText),
+            gray: state.autoSensText == "—")
         channel(
             &context, x + 8, y + 286, "2", state.sens2Text, PanelModel.knobAngle(state.sens2),
             level: state.pre2, peak: state.pre2Peak)
@@ -323,13 +330,31 @@ enum PanelCanvas {
     private static func button(
         _ context: inout GraphicsContext,
         _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
-        _ label: String, gray: Bool
+        _ label: String, caption: String = "", gray: Bool
     ) {
         fill(&context, rect(x + 2, y + 2, w, h, radius: 4), Color(hex: 0x1A1A1A))
         fill(&context, rect(x, y, w, h, radius: 4), gray ? grayButton : pink)
         strokeRect(&context, x, y, w, h, 4, gray ? grayEdge : pinkEdge, 1)
         strokeLine(&context, x + 4, y + 2, x + w - 4, y + 2, .white, 1)
-        text(&context, label, x, y, w, h, 10, Color(hex: 0x2A2A2A), bold: true)
+        if caption.isEmpty {
+            text(&context, label, x, y, w, h, 10, Color(hex: 0x2A2A2A), bold: true)
+        } else {
+            text(&context, label, x, y + 2, w, h / 2, 9, Color(hex: 0x2A2A2A), bold: true)
+            text(&context, caption, x, y + h / 2 - 2, w, h / 2, 8, Color(hex: 0x2A2A2A), bold: false)
+        }
+    }
+
+    /// `00020102` vira `00 02 01 02`. Cabe no botão.
+    static func spacedHex(_ hex: String) -> String {
+        guard hex != "—" else { return hex }
+        var parts: [String] = []
+        var index = hex.startIndex
+        while index < hex.endIndex && parts.count < 6 {
+            let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex) ?? hex.endIndex
+            parts.append(String(hex[index..<next]))
+            index = next
+        }
+        return parts.joined(separator: " ")
     }
 
     private static func knob(_ context: inout GraphicsContext, _ cx: CGFloat, _ cy: CGFloat, _ radius: CGFloat, _ angleDegrees: CGFloat) {

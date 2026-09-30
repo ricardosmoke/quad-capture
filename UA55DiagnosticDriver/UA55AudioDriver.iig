@@ -13,6 +13,10 @@ public:
     virtual void free(void) override;
     virtual kern_return_t Start(IOService* provider) override;
     virtual kern_return_t Stop(IOService* provider) override;
+    virtual kern_return_t NewUserClient(uint32_t type, IOUserClient** userClient) override;
+
+    // Leitura do ganho fora do Core Audio. Não entra na work queue do áudio.
+    virtual void CopyHardwareSens(uint8_t* left, uint8_t* right) LOCALONLY;
 
     virtual void CaptureIsochComplete(OSAction* action, IOReturn status)
         TYPE(IOUSBHostPipe::CompleteAsyncIsochIO);

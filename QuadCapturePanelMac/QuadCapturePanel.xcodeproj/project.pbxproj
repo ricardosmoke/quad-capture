@@ -13,6 +13,7 @@
 		B20000000000000000000034 /* InputLevelMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000044 /* InputLevelMonitor.swift */; };
 		B20000000000000000000035 /* PanelModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000045 /* PanelModel.swift */; };
 		B20000000000000000000036 /* HardwareGain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000046 /* HardwareGain.swift */; };
+		B20000000000000000000037 /* PanelLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000047 /* PanelLog.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +24,7 @@
 		B20000000000000000000044 /* InputLevelMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputLevelMonitor.swift; sourceTree = "<group>"; };
 		B20000000000000000000045 /* PanelModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelModel.swift; sourceTree = "<group>"; };
 		B20000000000000000000046 /* HardwareGain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareGain.swift; sourceTree = "<group>"; };
+		B20000000000000000000047 /* PanelLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelLog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +54,7 @@
 				B20000000000000000000044 /* InputLevelMonitor.swift */,
 				B20000000000000000000045 /* PanelModel.swift */,
 				B20000000000000000000046 /* HardwareGain.swift */,
+				B20000000000000000000047 /* PanelLog.swift */,
 				B20000000000000000000043 /* Assets.xcassets */,
 			);
 			path = QuadCapturePanel;
@@ -139,6 +142,7 @@
 				B20000000000000000000034 /* InputLevelMonitor.swift in Sources */,
 				B20000000000000000000035 /* PanelModel.swift in Sources */,
 				B20000000000000000000036 /* HardwareGain.swift in Sources */,
+				B20000000000000000000037 /* PanelLog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
