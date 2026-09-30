@@ -68,14 +68,40 @@ IOUserAudioStreamBasicDescription MakeFloatFormat(uint32_t channels, double samp
     return format;
 }
 
-void PublishStreamFormats(UA55AudioDevice_IVars* ivars, double sampleRate)
+void PublishChannelLayout(UA55AudioDevice* device, uint32_t outCh, uint32_t inCh)
+{
+    IOUserAudioChannelLabel outLabels[kUA55OutputChannels] = {
+        IOUserAudioChannelLabel::Left,
+        IOUserAudioChannelLabel::Right,
+        IOUserAudioChannelLabel::LeftSurround,
+        IOUserAudioChannelLabel::RightSurround,
+    };
+    IOUserAudioChannelLabel inLabels[kUA55InputChannels] = {
+        IOUserAudioChannelLabel::Left,
+        IOUserAudioChannelLabel::Right,
+        IOUserAudioChannelLabel::Center,
+        IOUserAudioChannelLabel::LeftSurround,
+        IOUserAudioChannelLabel::RightSurround,
+        IOUserAudioChannelLabel::Unknown,
+    };
+    if (outCh == 0 || outCh > kUA55OutputChannels) {
+        outCh = kUA55OutputChannels;
+    }
+    if (inCh == 0 || inCh > kUA55InputChannels) {
+        inCh = kUA55InputChannels;
+    }
+    device->SetPreferredOutputChannelLayout(outLabels, outCh);
+    device->SetPreferredInputChannelLayout(inLabels, inCh);
+}
+
+void PublishStreamFormats(UA55AudioDevice* device, UA55AudioDevice_IVars* ivars, double sampleRate)
 {
     IOUserAudioStreamBasicDescription outFormats[kUA55RateCount];
     IOUserAudioStreamBasicDescription inFormats[kUA55RateCount];
     uint32_t current = 0;
     for (uint32_t index = 0; index < kUA55RateCount; index++) {
-        outFormats[index] = MakeFloatFormat(kUA55OutputChannels, kUA55Rates[index].rate);
-        inFormats[index] = MakeFloatFormat(kUA55InputChannels, kUA55Rates[index].rate);
+        outFormats[index] = MakeFloatFormat(kUA55Rates[index].outputChannels, kUA55Rates[index].rate);
+        inFormats[index] = MakeFloatFormat(kUA55Rates[index].inputChannels, kUA55Rates[index].rate);
         if (kUA55Rates[index].rateInt == (uint32_t)sampleRate) {
             current = index;
         }
@@ -84,6 +110,28 @@ void PublishStreamFormats(UA55AudioDevice_IVars* ivars, double sampleRate)
     ivars->inputStream->SetAvailableStreamFormats(inFormats, kUA55RateCount);
     ivars->outputStream->SetCurrentStreamFormat(&outFormats[current]);
     ivars->inputStream->SetCurrentStreamFormat(&inFormats[current]);
+    PublishChannelLayout(device, kUA55Rates[current].outputChannels, kUA55Rates[current].inputChannels);
+
+    // O anel do HAL é buffer/bytesPorFrame. Em 192 kHz o formato é estéreo;
+    // encolher o comprimento mantém os 512 frames, senão o host vê o dobro.
+    const uint64_t outBytes =
+        (uint64_t)ivars->ringFrames * kUA55Rates[current].outputChannels * sizeof(float);
+    const uint64_t inBytes =
+        (uint64_t)ivars->ringFrames * kUA55Rates[current].inputChannels * sizeof(float);
+    uint64_t currentOut = 0;
+    uint64_t currentIn = 0;
+    if (ivars->outputBuffer.get() != nullptr &&
+        ivars->outputBuffer->GetLength(&currentOut) == kIOReturnSuccess &&
+        currentOut != outBytes &&
+        ivars->outputBuffer->SetLength(outBytes) == kIOReturnSuccess) {
+        ivars->outputStream->SetIOMemoryDescriptor(ivars->outputBuffer.get());
+    }
+    if (ivars->inputBuffer.get() != nullptr &&
+        ivars->inputBuffer->GetLength(&currentIn) == kIOReturnSuccess &&
+        currentIn != inBytes &&
+        ivars->inputBuffer->SetLength(inBytes) == kIOReturnSuccess) {
+        ivars->inputStream->SetIOMemoryDescriptor(ivars->inputBuffer.get());
+    }
 }
 
 void UpdateTimebase(UA55AudioDevice_IVars* ivars, double sampleRate)
@@ -215,22 +263,7 @@ bool UA55AudioDevice::init(IOUserAudioDriver* in_driver,
     SetCanBeDefaultSystemOutputDevice(true);
     SetPreferredChannelsForStereo(1, 2);
 
-    IOUserAudioChannelLabel outLabels[kUA55OutputChannels] = {
-        IOUserAudioChannelLabel::Left,
-        IOUserAudioChannelLabel::Right,
-        IOUserAudioChannelLabel::LeftSurround,
-        IOUserAudioChannelLabel::RightSurround,
-    };
-    IOUserAudioChannelLabel inLabels[kUA55InputChannels] = {
-        IOUserAudioChannelLabel::Left,
-        IOUserAudioChannelLabel::Right,
-        IOUserAudioChannelLabel::Center,
-        IOUserAudioChannelLabel::LeftSurround,
-        IOUserAudioChannelLabel::RightSurround,
-        IOUserAudioChannelLabel::Unknown,
-    };
-    SetPreferredOutputChannelLayout(outLabels, kUA55OutputChannels);
-    SetPreferredInputChannelLayout(inLabels, kUA55InputChannels);
+    PublishChannelLayout(this, kUA55OutputChannels, kUA55InputChannels);
 
     const uint64_t outBytes = (uint64_t)ivars->ringFrames * kUA55OutputChannels * sizeof(float);
     const uint64_t inBytes = (uint64_t)ivars->ringFrames * kUA55InputChannels * sizeof(float);
@@ -262,7 +295,7 @@ bool UA55AudioDevice::init(IOUserAudioDriver* in_driver,
     }
     ivars->inputStream->SetName(inName.get());
     ivars->inputStream->SetCurrentStreamFormat(&inFormat);
-    PublishStreamFormats(ivars, kUA55SampleRate);
+    PublishStreamFormats(this, ivars, kUA55SampleRate);
 
     error = AddStream(ivars->outputStream.get());
     if (error != kIOReturnSuccess) {
@@ -332,7 +365,7 @@ bool UA55AudioDevice::init(IOUserAudioDriver* in_driver,
     }
 
     os_log(OS_LOG_DEFAULT,
-           "[UA55] build=%u audio device configured 4out/6in @ 44.1/48/96 kHz volume=%d",
+           "[UA55] build=%u audio device configured 4out/6in @ 44.1/48/96 kHz, 2out/2in @ 192 kHz volume=%d",
            kUA55DriverBuild,
            volumesOk ? 1 : 0);
     return true;
@@ -397,7 +430,7 @@ kern_return_t UA55AudioDevice::ConfigureHardware(uint64_t usbStreamAddr)
             UpdateTimebase(ivars, hardware->rate);
             SetSampleRate(hardware->rate);
             if (ivars->outputStream.get() != nullptr && ivars->inputStream.get() != nullptr) {
-                PublishStreamFormats(ivars, hardware->rate);
+                PublishStreamFormats(this, ivars, hardware->rate);
             }
             os_log(OS_LOG_DEFAULT, "[UA55] adopted hardware rate %u Hz", hardware->rateInt);
         }
@@ -460,12 +493,14 @@ kern_return_t UA55AudioDevice::HandleChangeSampleRate(double in_sample_rate)
                 return;
             }
             const UA55RateConfig* pending = UA55RateForHz(device->ivars->pendingRate);
-            if (pending != nullptr && pending->rateInt == 44100 &&
-                device->ivars->usbStream->CurrentRate() == 96000) {
-                if (!device->ivars->usbStream->Warm44100From96000()) {
-                    device->ivars->rateChangeInFlight = false;
-                    return;
-                }
+            const uint32_t currentHz = device->ivars->usbStream->CurrentRate();
+            const bool warm441 =
+                pending != nullptr &&
+                ((pending->rateInt == 44100 && (currentHz == 96000 || currentHz == 192000)) ||
+                 (currentHz == 44100 && pending->rateInt == 192000));
+            if (warm441 && !device->ivars->usbStream->Warm44100Via48000(pending->rateInt)) {
+                device->ivars->rateChangeInFlight = false;
+                return;
             }
             const kern_return_t queued =
                 device->RequestDeviceConfigurationChange(kUA55ConfigChangeSampleRate, nullptr);
@@ -504,9 +539,10 @@ kern_return_t UA55AudioDevice::PerformDeviceConfigurationChange(uint64_t in_chan
         UpdateTimebase(ivars, mode->rate);
         SetSampleRate(mode->rate);
         if (ivars->outputStream.get() != nullptr && ivars->inputStream.get() != nullptr) {
-            PublishStreamFormats(ivars, mode->rate);
+            PublishStreamFormats(this, ivars, mode->rate);
         }
-        os_log(OS_LOG_DEFAULT, "[UA55] sample rate now %u Hz", mode->rateInt);
+        os_log(OS_LOG_DEFAULT, "[UA55] sample rate now %u Hz %uout/%uin",
+               mode->rateInt, mode->outputChannels, mode->inputChannels);
 
         ivars->rateChangeInFlight = false;
         const UA55RateConfig* latest = UA55RateForHz(ivars->pendingRate);
@@ -532,6 +568,9 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
     ivars->workQueue->DispatchSync(^() {
         float* outAddr = nullptr;
         float* inAddr = nullptr;
+        uint32_t outCh = kUA55OutputChannels;
+        uint32_t inCh = kUA55InputChannels;
+        const UA55RateConfig* playing = nullptr;
         const bool alreadyStreaming =
             (ivars->usbStream != nullptr && ivars->usbStream->IsStreaming());
 
@@ -567,10 +606,16 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
             goto Failure;
         }
 
-        // NÃO limpar o ring se o USB já está a correr — apagar mid-stream causa picote.
+        playing = UA55RateForHz((double)ivars->currentRateInt);
+        if (playing != nullptr && playing->outputChannels != 0) {
+            outCh = playing->outputChannels;
+        }
+        if (playing != nullptr && playing->inputChannels != 0) {
+            inCh = playing->inputChannels;
+        }
         if (!alreadyStreaming) {
-            memset(outAddr, 0, (size_t)ivars->ringFrames * kUA55OutputChannels * sizeof(float));
-            memset(inAddr, 0, (size_t)ivars->ringFrames * kUA55InputChannels * sizeof(float));
+            memset(outAddr, 0, (size_t)ivars->ringFrames * outCh * sizeof(float));
+            memset(inAddr, 0, (size_t)ivars->ringFrames * inCh * sizeof(float));
             ivars->sampleTime = 0;
             ivars->lastPublishedZts = 0;
             UpdateCurrentZeroTimestamp(0, mach_absolute_time());

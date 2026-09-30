@@ -304,7 +304,8 @@ uint32_t UA55UsbStream::UnpackCaptureToBridge(IsochSlot* slot)
 
     IOUSBIsochronousFrame* frames = reinterpret_cast<IOUSBIsochronousFrame*>(frameRange.address);
     const uint8_t* data = reinterpret_cast<const uint8_t*>(dataRange.address);
-    const uint32_t bytesPerAudioFrame = kUA55InputChannels * kUA55BytesPerSample;
+    const uint32_t inCh = rate_.inputChannels != 0 ? rate_.inputChannels : kUA55InputChannels;
+    const uint32_t bytesPerAudioFrame = inCh * kUA55BytesPerSample;
     uint32_t byteOffset = 0;
     uint32_t totalAudioFrames = 0;
     uint8_t uframeSamples[kUA55IsochFramesPerTransfer];
@@ -323,9 +324,9 @@ uint32_t UA55UsbStream::UnpackCaptureToBridge(IsochSlot* slot)
             for (uint32_t frame = 0; frame < nFrames; frame++) {
                 const uint32_t ringIndex =
                     (uint32_t)((captureWriteSample_ + totalAudioFrames + frame) % bridgeFrames_);
-                int32_t* dst = &captureBridge_[ringIndex * kUA55InputChannels];
-                const int32_t* frameSrc = &src[frame * kUA55InputChannels];
-                for (uint32_t ch = 0; ch < kUA55InputChannels; ch++) {
+                int32_t* dst = &captureBridge_[ringIndex * inCh];
+                const int32_t* frameSrc = &src[frame * inCh];
+                for (uint32_t ch = 0; ch < inCh; ch++) {
                     dst[ch] = frameSrc[ch];
                 }
             }
@@ -400,16 +401,17 @@ void UA55UsbStream::HalReadInput(float* inputRing,
         return;
     }
 
+    const uint32_t inCh = rate_.inputChannels != 0 ? rate_.inputChannels : kUA55InputChannels;
     const uint64_t writeTip = captureWriteSample_;
     for (uint32_t i = 0; i < frameCount; i++) {
         const uint64_t absSample = sampleTime + i;
         const uint32_t dstIndex = (uint32_t)((sampleTime + i) % ringFrames);
-        float* dst = &inputRing[dstIndex * kUA55InputChannels];
+        float* dst = &inputRing[dstIndex * inCh];
 
         // Ainda não escrito pelo USB (ou dentro da margem de corrida).
         if (absSample + 16ull >= writeTip) {
             captureUnderruns_++;
-            for (uint32_t ch = 0; ch < kUA55InputChannels; ch++) {
+            for (uint32_t ch = 0; ch < inCh; ch++) {
                 dst[ch] = 0.0f;
             }
             continue;
@@ -417,15 +419,15 @@ void UA55UsbStream::HalReadInput(float* inputRing,
         // Já reescrito no anel (HAL atrasado demais).
         if (writeTip - absSample > bridgeFrames_) {
             captureOverruns_++;
-            for (uint32_t ch = 0; ch < kUA55InputChannels; ch++) {
+            for (uint32_t ch = 0; ch < inCh; ch++) {
                 dst[ch] = 0.0f;
             }
             continue;
         }
 
         const uint32_t srcIndex = (uint32_t)(absSample % bridgeFrames_);
-        const int32_t* src = &captureBridge_[srcIndex * kUA55InputChannels];
-        for (uint32_t ch = 0; ch < kUA55InputChannels; ch++) {
+        const int32_t* src = &captureBridge_[srcIndex * inCh];
+        for (uint32_t ch = 0; ch < inCh; ch++) {
             dst[ch] = S24In32ToFloat(src[ch]);
         }
     }
@@ -444,7 +446,8 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
     IOUSBIsochronousFrame* frames = reinterpret_cast<IOUSBIsochronousFrame*>(frameRange.address);
     int32_t* data = reinterpret_cast<int32_t*>(dataRange.address);
     uint32_t totalFrames = 0;
-    const uint32_t bytesPerFrame = kUA55OutputChannels * kUA55BytesPerSample;
+    const uint32_t outCh = rate_.outputChannels != 0 ? rate_.outputChannels : kUA55OutputChannels;
+    const uint32_t bytesPerFrame = outCh * kUA55BytesPerSample;
 
     int64_t drift = 0;
     // Alinhar OUT à ponta do HAL (não ao capture): o WriteEnd é a fonte da verdade.
@@ -505,9 +508,9 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
 
         uint32_t consumedHere = 0;
         for (uint32_t frame = 0; frame < samples; frame++) {
-            int32_t* dst = &data[(totalFrames + frame) * kUA55OutputChannels];
+            int32_t* dst = &data[(totalFrames + frame) * outCh];
             if (playbackBridge_ == nullptr || bridgeFrames_ == 0) {
-                for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
+                for (uint32_t ch = 0; ch < outCh; ch++) {
                     dst[ch] = 0;
                 }
                 consumedHere++;
@@ -517,14 +520,14 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
             // Sem WriteEnd ainda: silêncio sem avançar, senão a leitura
             // larga na frente do HAL e o pacote seguinte sai zerado.
             if (timestampTarget_ == nullptr) {
-                for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
+                for (uint32_t ch = 0; ch < outCh; ch++) {
                     dst[ch] = 0;
                 }
                 consumedHere++;
                 continue;
             }
             if (halWriteSample_ == 0) {
-                for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
+                for (uint32_t ch = 0; ch < outCh; ch++) {
                     dst[ch] = 0;
                 }
                 continue;
@@ -534,14 +537,14 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
                 // Não avança o ponteiro: senão a leitura fica na frente do HAL
                 // e cada pacote seguinte sai zerado (ruído / velocidade errada).
                 underruns_++;
-                for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
+                for (uint32_t ch = 0; ch < outCh; ch++) {
                     dst[ch] = 0;
                 }
                 continue;
             }
             const uint32_t ringIndex = (uint32_t)(absSample % bridgeFrames_);
-            const int32_t* src = &playbackBridge_[ringIndex * kUA55OutputChannels];
-            for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
+            const int32_t* src = &playbackBridge_[ringIndex * outCh];
+            for (uint32_t ch = 0; ch < outCh; ch++) {
                 dst[ch] = src[ch];
             }
             consumedHere++;
@@ -606,13 +609,17 @@ void UA55UsbStream::HalWriteOutput(const float* outputRing,
     const bool muteR = masterMuted || __atomic_load_n(&outputMutePair_[1], __ATOMIC_RELAXED) != 0;
     const float gainL = muteL ? 0.0f : LoadOutputPairGain(0);
     const float gainR = muteR ? 0.0f : LoadOutputPairGain(1);
-    const float channelGain[kUA55OutputChannels] = { gainL, gainR, gainL, gainR };
+    const uint32_t outCh = rate_.outputChannels != 0 ? rate_.outputChannels : kUA55OutputChannels;
+    float channelGain[kUA55OutputChannels];
+    for (uint32_t ch = 0; ch < outCh; ch++) {
+        channelGain[ch] = (ch % 2u) == 0u ? gainL : gainR;
+    }
     for (uint32_t i = 0; i < frameCount; i++) {
         const uint32_t srcIndex = (uint32_t)((sampleTime + i) % ringFrames);
         const uint32_t dstIndex = (uint32_t)((sampleTime + i) % bridgeFrames_);
-        const float* src = &outputRing[srcIndex * kUA55OutputChannels];
-        int32_t* dst = &playbackBridge_[dstIndex * kUA55OutputChannels];
-        for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
+        const float* src = &outputRing[srcIndex * outCh];
+        int32_t* dst = &playbackBridge_[dstIndex * outCh];
+        for (uint32_t ch = 0; ch < outCh; ch++) {
             dst[ch] = FloatToS24In32(src[ch] * channelGain[ch]);
         }
     }
@@ -827,8 +834,8 @@ kern_return_t UA55UsbStream::ApplySampleRate(uint32_t rateInt)
     // silêncio nessa passagem NÃO pode ser aqui: o Perform segura as
     // completions e o isoc nunca drena.
     const bool via48 =
-        (rate_.rateInt == 96000 && mode->rateInt == 44100) ||
-        (rate_.rateInt == 44100 && mode->rateInt == 96000);
+        ((rate_.rateInt == 96000 || rate_.rateInt == 192000) && mode->rateInt == 44100) ||
+        (rate_.rateInt == 44100 && (mode->rateInt == 96000 || mode->rateInt == 192000));
     if (via48) {
         const uint32_t finalRate = mode->rateInt;
         os_log(OS_LOG_DEFAULT, "[UA55] sample rate via 48000 before %u", finalRate);
@@ -902,12 +909,12 @@ void UA55UsbStream::PrimeStreamingSilently(uint32_t milliseconds)
            __atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE));
 }
 
-bool UA55UsbStream::Warm44100From96000()
+bool UA55UsbStream::Warm44100Via48000(uint32_t finalRate)
 {
-    if (rate_.rateInt != 96000) {
-        return true;
+    if (rate_.rateInt == 48000 || rate_.rateInt == finalRate) {
+        return ApplySampleRate(finalRate) == kIOReturnSuccess;
     }
-    os_log(OS_LOG_DEFAULT, "[UA55] sample rate warm 48000 before 44100");
+    os_log(OS_LOG_DEFAULT, "[UA55] sample rate warm 48000 before %u", finalRate);
     if (ApplySampleRate(48000) != kIOReturnSuccess) {
         return false;
     }
@@ -918,7 +925,7 @@ bool UA55UsbStream::Warm44100From96000()
                __atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE));
         return false;
     }
-    return ApplySampleRate(44100) == kIOReturnSuccess;
+    return ApplySampleRate(finalRate) == kIOReturnSuccess;
 }
 
 kern_return_t UA55UsbStream::Prepare(IOUSBHostDevice* device, IOService* client, UA55AudioDriver* actionOwner)

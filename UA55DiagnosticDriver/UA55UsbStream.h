@@ -29,9 +29,10 @@ public:
     // completions poderem correr.
     void BeginRateChangeQuiesce();
     bool FinishRateChangeDrain();
-    // 96 kHz → 44.1: transmite silêncio em 48 kHz fora do Perform, depois
-    // deixa o USB já em 44.1. Dentro do Perform as completions não correm.
-    bool Warm44100From96000();
+    // 96 ou 192 kHz → 44.1, e 44.1 → 192: transmite silêncio em 48 kHz fora
+    // do Perform, depois deixa o USB já na taxa final. Dentro do Perform
+    // as completions não correm.
+    bool Warm44100Via48000(uint32_t finalRate);
 
     void SetTimestampTarget(volatile uint64_t* sampleTime, void* timestampTarget);
     void ClearTimestampTarget();

@@ -10,7 +10,7 @@ static const uint16_t kUA55ProductID = 0x012F;
 
 // Deve coincidir com CURRENT_PROJECT_VERSION no Xcode (log ao plugar).
 #ifndef UA55_DRIVER_BUILD
-#define UA55_DRIVER_BUILD 48
+#define UA55_DRIVER_BUILD 49
 #endif
 static const uint32_t kUA55DriverBuild = UA55_DRIVER_BUILD;
 
@@ -58,10 +58,12 @@ static const uint32_t kUA55IsochRingDepth = 8;
 static const uint32_t kUA55IsochFramesPerTransfer = 8;
 static const uint32_t kUA55IsochLogEveryCompletions = 250;
 
-// AudioDriverKit: 4 out / 6 in, Float32 no HAL ↔ S32 24-in-32 no USB.
-// Alts medidos: 1 = 44.1 kHz, 2 = 48 kHz, 3 = 96 kHz. Alt 4 é 192 kHz em 2 canais
-// e não entra nesta lista. Pacotes HS (8000 microframes/s): 44.1 varia 5–6 samples,
-// 48 é 6, 96 é 12. O maxPacket cobre +1 sample de folga async.
+// AudioDriverKit: Float32 no HAL ↔ S32 24-in-32 no USB.
+// Alts medidos: 1 = 44.1 kHz, 2 = 48 kHz, 3 = 96 kHz, todos 4 out / 6 in.
+// Alt 4 = 192 kHz e só existe em 2 out / 2 in (maxPacket 200 = 25×2×4).
+// Pacotes HS (8000 microframes/s): 44.1 varia 5–6 samples, 48 é 6, 96 é 12,
+// 192 é 24. O maxPacket cobre +1 sample de folga async.
+// kUA55OutputChannels / kUA55InputChannels são o máximo, para o tamanho dos anéis.
 static const double kUA55SampleRate = 44100.0;
 static const uint32_t kUA55SampleRateInt = 44100;
 
@@ -74,13 +76,16 @@ struct UA55RateConfig {
     uint32_t samplesPerUframeMin;
     uint32_t samplesPerUframeMax;
     uint32_t nominalFramesPerTransfer;
+    uint32_t outputChannels;
+    uint32_t inputChannels;
 };
 
-static const uint32_t kUA55RateCount = 3;
+static const uint32_t kUA55RateCount = 4;
 static const UA55RateConfig kUA55Rates[kUA55RateCount] = {
-    { 44100.0, 44100, 1, 112, 168, 5, 6, 44 },
-    { 48000.0, 48000, 2, 112, 168, 6, 6, 48 },
-    { 96000.0, 96000, 3, 208, 312, 12, 12, 96 },
+    { 44100.0, 44100, 1, 112, 168, 5, 6, 44, 4, 6 },
+    { 48000.0, 48000, 2, 112, 168, 6, 6, 48, 4, 6 },
+    { 96000.0, 96000, 3, 208, 312, 12, 12, 96, 4, 6 },
+    { 192000.0, 192000, 4, 200, 200, 24, 24, 192, 2, 2 },
 };
 
 inline const UA55RateConfig* UA55RateForHz(double hz)
