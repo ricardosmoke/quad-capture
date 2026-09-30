@@ -5,6 +5,23 @@
 
 #include "UA55UsbStream.h"
 #include "UA55AudioDriver.h"
+#include "UA55Quirks.h"
+
+// Sobrevive a um rematch USB no mesmo processo da dext.
+static uint32_t gUA55DesiredRateHz = kUA55SampleRateInt;
+
+namespace {
+
+static const uint8_t kUA55ClockRequest = 3;
+static const uint16_t kUA55ClockReadValue = 0x0001;
+static const uint16_t kUA55ClockWriteValue = 0x0008;
+static const uint8_t kUA55ClockWritePrefix = 0x40;
+static const uint8_t kUA55ClockRequestIn = 0xC0;
+static const uint8_t kUA55ClockRequestOut = 0x40;
+static const uint32_t kUA55ClockPollAttempts = 40;
+static const uint32_t kUA55ClockPollMs = 25;
+
+} // namespace
 
 extern "C" void UA55AudioDevicePublishTimestamp(void* device, uint64_t sampleTime, uint64_t hostTime);
 
@@ -295,7 +312,7 @@ uint32_t UA55UsbStream::UnpackCaptureToBridge(IsochSlot* slot)
         const uint32_t complete = frames[index].completeCount;
         const uint32_t request = frames[index].requestCount != 0
             ? frames[index].requestCount
-            : kUA55CaptureMaxPacketAlt1;
+            : rate_.captureMaxPacket;
 
         if (complete >= bytesPerAudioFrame && (complete % bytesPerAudioFrame) == 0) {
             const uint32_t nFrames = complete / bytesPerAudioFrame;
@@ -316,7 +333,9 @@ uint32_t UA55UsbStream::UnpackCaptureToBridge(IsochSlot* slot)
     }
 
     captureWriteSample_ += totalAudioFrames;
-    if (totalAudioFrames >= 40u && totalAudioFrames <= 48u) {
+    const uint32_t minTransfer = rate_.samplesPerUframeMin * kUA55IsochFramesPerTransfer;
+    const uint32_t maxTransfer = rate_.samplesPerUframeMax * kUA55IsochFramesPerTransfer;
+    if (totalAudioFrames >= minTransfer && totalAudioFrames <= maxTransfer) {
         lastCaptureAudioFrames_ = totalAudioFrames;
     }
     MaybePublishZts();
@@ -421,7 +440,7 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
         const uint64_t target = halWriteSample_ - kUA55PlaybackReadSlackFrames;
         drift = (int64_t)playbackReadSample_ - (int64_t)target;
         lastLoggedDrift_ = drift;
-        if (drift > (int64_t)kUA55PlaybackResyncThreshold ||
+        if (drift > (int64_t)kUA55PlaybackReadSlackFrames ||
             drift < -(int64_t)kUA55PlaybackResyncThreshold) {
             playbackReadSample_ = target;
             playbackResyncs_++;
@@ -434,39 +453,51 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
         lastLoggedDrift_ = drift;
     }
 
+    const uint32_t minSamples = rate_.samplesPerUframeMin;
+    const uint32_t maxSamples = rate_.samplesPerUframeMax;
+    const uint32_t minTransfer = minSamples * kUA55IsochFramesPerTransfer;
+    const uint32_t maxTransfer = maxSamples * kUA55IsochFramesPerTransfer;
+
     uint32_t remaining = 0;
-    for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
-        playbackPhase_ += kUA55SampleRateInt;
-        uint32_t samples = playbackPhase_ / kUA55HighSpeedUframesPerSecond;
-        playbackPhase_ %= kUA55HighSpeedUframesPerSecond;
-        if (samples < 5u) {
-            samples = 5u;
-        } else if (samples > 6u) {
-            samples = 6u;
+    if (minSamples == maxSamples) {
+        remaining = minTransfer;
+    } else {
+        for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
+            playbackPhase_ += rate_.rateInt;
+            uint32_t samples = playbackPhase_ / kUA55HighSpeedUframesPerSecond;
+            playbackPhase_ %= kUA55HighSpeedUframesPerSecond;
+            if (samples < minSamples) {
+                samples = minSamples;
+            } else if (samples > maxSamples) {
+                samples = maxSamples;
+            }
+            remaining += samples;
         }
-        remaining += samples;
     }
-    if (lastCaptureAudioFrames_ >= 40u && lastCaptureAudioFrames_ <= 48u) {
+    if (lastCaptureAudioFrames_ >= minTransfer && lastCaptureAudioFrames_ <= maxTransfer) {
         remaining = lastCaptureAudioFrames_;
     }
-    if (drift < -16) {
-        remaining += 1u;
-    } else if (drift > 16 && remaining > 40u) {
-        remaining -= 1u;
-    }
-    if (remaining < 40u) {
-        remaining = 40u;
-    } else if (remaining > 48u) {
-        remaining = 48u;
+    if (minSamples != maxSamples) {
+        if (drift < -16) {
+            remaining += 1u;
+        } else if (drift > 16 && remaining > minTransfer) {
+            remaining -= 1u;
+        }
+        if (remaining < minTransfer) {
+            remaining = minTransfer;
+        } else if (remaining > maxTransfer) {
+            remaining = maxTransfer;
+        }
     }
 
+    uint32_t playbackConsumed = 0;
     for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
         const uint32_t uframesLeft = kUA55IsochFramesPerTransfer - index;
         uint32_t samples = remaining / uframesLeft;
-        if (samples < 5u) {
-            samples = 5u;
-        } else if (samples > 6u) {
-            samples = 6u;
+        if (samples < minSamples) {
+            samples = minSamples;
+        } else if (samples > maxSamples) {
+            samples = maxSamples;
         }
         if (samples > remaining) {
             samples = remaining;
@@ -479,23 +510,28 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
         frames[index].reserved = 0;
         frames[index].timeStamp = 0;
 
+        uint32_t consumedHere = 0;
         for (uint32_t frame = 0; frame < samples; frame++) {
             int32_t* dst = &data[(totalFrames + frame) * kUA55OutputChannels];
             if (playbackBridge_ == nullptr || bridgeFrames_ == 0) {
                 for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
                     dst[ch] = 0;
                 }
+                consumedHere++;
                 continue;
             }
             // Sem HAL ativo (pause) ou ainda sem WriteEnd: silêncio, sem contar underrun.
-            const uint64_t absSample = playbackReadSample_ + totalFrames + frame;
             if (timestampTarget_ == nullptr || halWriteSample_ == 0) {
                 for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
                     dst[ch] = 0;
                 }
+                consumedHere++;
                 continue;
             }
+            const uint64_t absSample = playbackReadSample_ + playbackConsumed + consumedHere;
             if (absSample >= halWriteSample_) {
+                // Não avança o ponteiro: senão a leitura fica na frente do HAL
+                // e cada pacote seguinte sai zerado (ruído / velocidade errada).
                 underruns_++;
                 for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
                     dst[ch] = 0;
@@ -507,11 +543,13 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
             for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
                 dst[ch] = src[ch];
             }
+            consumedHere++;
         }
         totalFrames += samples;
+        playbackConsumed += consumedHere;
     }
 
-    playbackReadSample_ += totalFrames;
+    playbackReadSample_ += playbackConsumed;
     return totalFrames;
 }
 
@@ -602,6 +640,238 @@ void UA55UsbStream::ClearTimestampTarget()
     timestampTarget_ = nullptr;
 }
 
+kern_return_t UA55UsbStream::OpenAudioPipes(uint8_t alternate)
+{
+    if (playbackInterface_ == nullptr || captureInterface_ == nullptr) {
+        return kIOReturnOffline;
+    }
+
+    OSSafeReleaseNULL(playbackPipe_);
+    OSSafeReleaseNULL(capturePipe_);
+
+    kern_return_t result = kIOReturnSuccess;
+    if (streamedSinceOpen_) {
+        // A UA-55 reinicia se o alt muda direto de um alt que acabou de
+        // transmitir. O ALSA passa por alt 0 antes do alt novo.
+        result = playbackInterface_->SelectAlternateSetting(0);
+        if (result != kIOReturnSuccess) {
+            os_log(OS_LOG_DEFAULT, "[UA55] UsbStream IF0 alt 0=FAILED 0x%08x", (unsigned int)result);
+            return result;
+        }
+        result = captureInterface_->SelectAlternateSetting(0);
+        if (result != kIOReturnSuccess) {
+            os_log(OS_LOG_DEFAULT, "[UA55] UsbStream IF1 alt 0=FAILED 0x%08x", (unsigned int)result);
+            return result;
+        }
+        streamedSinceOpen_ = false;
+        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream idle alt before %u", alternate);
+        IOSleep(50);
+    }
+
+    result = playbackInterface_->SelectAlternateSetting(alternate);
+    if (result != kIOReturnSuccess) {
+        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream IF0 alt %u=FAILED 0x%08x",
+               alternate, (unsigned int)result);
+        return result;
+    }
+    result = captureInterface_->SelectAlternateSetting(alternate);
+    if (result != kIOReturnSuccess) {
+        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream IF1 alt %u=FAILED 0x%08x",
+               alternate, (unsigned int)result);
+        return result;
+    }
+
+    result = playbackInterface_->CopyPipe(kUA55PlaybackEndpointAddress, &playbackPipe_);
+    if (result != kIOReturnSuccess || playbackPipe_ == nullptr) {
+        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream OUT pipe=FAILED 0x%08x", (unsigned int)result);
+        return result != kIOReturnSuccess ? result : kIOReturnNoDevice;
+    }
+    result = captureInterface_->CopyPipe(kUA55CaptureEndpointAddress, &capturePipe_);
+    if (result != kIOReturnSuccess || capturePipe_ == nullptr) {
+        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream IN pipe=FAILED 0x%08x", (unsigned int)result);
+        return result != kIOReturnSuccess ? result : kIOReturnNoDevice;
+    }
+    return kIOReturnSuccess;
+}
+
+kern_return_t UA55UsbStream::ReadHardwareRate(uint32_t* rateOut)
+{
+    if (rateOut == nullptr || device_ == nullptr || client_ == nullptr) {
+        return kIOReturnBadArgument;
+    }
+
+    IOBufferMemoryDescriptor* buffer = nullptr;
+    kern_return_t result = IOBufferMemoryDescriptor::Create(kIOMemoryDirectionIn, 4, 0, &buffer);
+    if (result != kIOReturnSuccess || buffer == nullptr) {
+        return result != kIOReturnSuccess ? result : kIOReturnNoMemory;
+    }
+    result = buffer->SetLength(4);
+    if (result != kIOReturnSuccess) {
+        OSSafeReleaseNULL(buffer);
+        return result;
+    }
+
+    uint16_t transferred = 0;
+    result = device_->DeviceRequest(client_,
+                                     kUA55ClockRequestIn,
+                                     kUA55ClockRequest,
+                                     kUA55ClockReadValue,
+                                     0,
+                                     4,
+                                     buffer,
+                                     &transferred,
+                                     1000);
+    if (result == kIOReturnSuccess && transferred >= 3) {
+        IOAddressSegment range = {};
+        if (buffer->GetAddressRange(&range) == kIOReturnSuccess && range.address != 0) {
+            const uint8_t* data = reinterpret_cast<const uint8_t*>(range.address);
+            *rateOut = (uint32_t)data[0] | ((uint32_t)data[1] << 8) | ((uint32_t)data[2] << 16);
+        } else {
+            result = kIOReturnNoMemory;
+        }
+    } else if (result == kIOReturnSuccess) {
+        result = kIOReturnUnderrun;
+    }
+    OSSafeReleaseNULL(buffer);
+    return result;
+}
+
+kern_return_t UA55UsbStream::SetHardwareClock(uint32_t rateInt)
+{
+    if (!kUA55VendorRequestsEnabled) {
+        hardwareRate_ = rateInt;
+        return kIOReturnSuccess;
+    }
+    if (device_ == nullptr || client_ == nullptr) {
+        return kIOReturnOffline;
+    }
+
+    uint32_t current = 0;
+    kern_return_t result = ReadHardwareRate(&current);
+    if (result == kIOReturnSuccess && current == rateInt) {
+        hardwareRate_ = rateInt;
+        os_log(OS_LOG_DEFAULT, "[UA55] clock already %u Hz", rateInt);
+        return kIOReturnSuccess;
+    }
+    if (result != kIOReturnSuccess) {
+        os_log(OS_LOG_DEFAULT, "[UA55] clock read=FAILED 0x%08x", (unsigned int)result);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[UA55] clock read %u Hz", current);
+    }
+
+    IOBufferMemoryDescriptor* buffer = nullptr;
+    result = IOBufferMemoryDescriptor::Create(kIOMemoryDirectionOut, 4, 0, &buffer);
+    if (result != kIOReturnSuccess || buffer == nullptr) {
+        return result != kIOReturnSuccess ? result : kIOReturnNoMemory;
+    }
+    result = buffer->SetLength(4);
+    if (result != kIOReturnSuccess) {
+        OSSafeReleaseNULL(buffer);
+        return result;
+    }
+    IOAddressSegment range = {};
+    result = buffer->GetAddressRange(&range);
+    if (result != kIOReturnSuccess || range.address == 0) {
+        OSSafeReleaseNULL(buffer);
+        return result != kIOReturnSuccess ? result : kIOReturnNoMemory;
+    }
+    uint8_t* data = reinterpret_cast<uint8_t*>(range.address);
+    data[0] = kUA55ClockWritePrefix;
+    data[1] = (uint8_t)(rateInt & 0xFF);
+    data[2] = (uint8_t)((rateInt >> 8) & 0xFF);
+    data[3] = (uint8_t)((rateInt >> 16) & 0xFF);
+
+    uint16_t transferred = 0;
+    result = device_->DeviceRequest(client_,
+                                     kUA55ClockRequestOut,
+                                     kUA55ClockRequest,
+                                     kUA55ClockWriteValue,
+                                     0,
+                                     4,
+                                     buffer,
+                                     &transferred,
+                                     1000);
+    OSSafeReleaseNULL(buffer);
+    if (result != kIOReturnSuccess || transferred != 4) {
+        os_log(OS_LOG_DEFAULT, "[UA55] clock write %u Hz=FAILED 0x%08x transferred=%u",
+               rateInt,
+               (unsigned int)result,
+               transferred);
+        return result != kIOReturnSuccess ? result : kIOReturnUnderrun;
+    }
+
+    for (uint32_t attempt = 0; attempt < kUA55ClockPollAttempts; attempt++) {
+        current = 0;
+        result = ReadHardwareRate(&current);
+        if (result == kIOReturnSuccess && current == rateInt) {
+            hardwareRate_ = rateInt;
+            os_log(OS_LOG_DEFAULT, "[UA55] clock now %u Hz", rateInt);
+            return kIOReturnSuccess;
+        }
+        IOSleep(kUA55ClockPollMs);
+    }
+
+    os_log(OS_LOG_DEFAULT, "[UA55] clock did not reach %u Hz (last=%u)", rateInt, current);
+    return kIOReturnTimeout;
+}
+
+kern_return_t UA55UsbStream::ApplySampleRate(uint32_t rateInt)
+{
+    const UA55RateConfig* mode = UA55RateForHz((double)rateInt);
+    if (mode == nullptr) {
+        return kIOReturnUnsupported;
+    }
+    gUA55DesiredRateHz = mode->rateInt;
+    if (rate_.rateInt == mode->rateInt &&
+        hardwareRate_ == mode->rateInt &&
+        playbackPipe_ != nullptr &&
+        capturePipe_ != nullptr) {
+        return kIOReturnSuccess;
+    }
+    if (playbackInterface_ == nullptr || captureInterface_ == nullptr) {
+        return kIOReturnOffline;
+    }
+
+    const UA55RateConfig previous = rate_;
+    const uint32_t previousHardware = hardwareRate_;
+    if (streaming_) {
+        StopStreaming();
+    }
+    if (__atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE) != 0) {
+        os_log(OS_LOG_DEFAULT, "[UA55] sample rate change aborted, isoch still in flight");
+        return kIOReturnTimeout;
+    }
+
+    kern_return_t result = OpenAudioPipes(mode->alternate);
+    if (result != kIOReturnSuccess) {
+        if (previous.rateInt != 0) {
+            OpenAudioPipes(previous.alternate);
+            rate_ = previous;
+        }
+        return result;
+    }
+
+    result = SetHardwareClock(mode->rateInt);
+    if (result != kIOReturnSuccess) {
+        if (previous.rateInt != 0 && previous.alternate != mode->alternate) {
+            OpenAudioPipes(previous.alternate);
+            rate_ = previous;
+            hardwareRate_ = previousHardware;
+        }
+        return result;
+    }
+
+    rate_ = *mode;
+    playbackPhase_ = 0;
+    lastCaptureAudioFrames_ = mode->nominalFramesPerTransfer;
+    os_log(OS_LOG_DEFAULT, "[UA55] sample rate %u Hz alt=%u packets out=%u in=%u",
+           mode->rateInt,
+           mode->alternate,
+           mode->playbackMaxPacket,
+           mode->captureMaxPacket);
+    return kIOReturnSuccess;
+}
+
 kern_return_t UA55UsbStream::Prepare(IOUSBHostDevice* device, IOService* client, UA55AudioDriver* actionOwner)
 {
     if (device == nullptr || client == nullptr || actionOwner == nullptr) {
@@ -658,26 +928,9 @@ kern_return_t UA55UsbStream::Prepare(IOUSBHostDevice* device, IOService* client,
     }
     captureOpened_ = true;
 
-    result = playbackInterface_->SelectAlternateSetting(kUA55StreamingAlternate);
+    result = ApplySampleRate(gUA55DesiredRateHz);
     if (result != kIOReturnSuccess) {
-        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream IF0 alt=FAILED 0x%08x", (unsigned int)result);
         return result;
-    }
-    result = captureInterface_->SelectAlternateSetting(kUA55StreamingAlternate);
-    if (result != kIOReturnSuccess) {
-        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream IF1 alt=FAILED 0x%08x", (unsigned int)result);
-        return result;
-    }
-
-    result = playbackInterface_->CopyPipe(kUA55PlaybackEndpointAddress, &playbackPipe_);
-    if (result != kIOReturnSuccess || playbackPipe_ == nullptr) {
-        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream OUT pipe=FAILED 0x%08x", (unsigned int)result);
-        return result != kIOReturnSuccess ? result : kIOReturnNoDevice;
-    }
-    result = captureInterface_->CopyPipe(kUA55CaptureEndpointAddress, &capturePipe_);
-    if (result != kIOReturnSuccess || capturePipe_ == nullptr) {
-        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream IN pipe=FAILED 0x%08x", (unsigned int)result);
-        return result != kIOReturnSuccess ? result : kIOReturnNoDevice;
     }
 
     // MIDI IF2: drenar bulk IN (painel/mixer SysEx). Best-effort.
@@ -1140,7 +1393,7 @@ kern_return_t UA55UsbStream::SubmitCaptureSlot(uint32_t slotIndex)
     }
 
     IsochSlot* slot = &captureSlots_[slotIndex];
-    kern_return_t result = FillFrameList(slot, kUA55CaptureMaxPacketAlt1);
+    kern_return_t result = FillFrameList(slot, rate_.captureMaxPacket);
     if (result != kIOReturnSuccess) {
         return result;
     }
@@ -1153,7 +1406,12 @@ kern_return_t UA55UsbStream::SubmitCaptureSlot(uint32_t slotIndex)
         *reinterpret_cast<uint32_t*>(slot->action->GetReference()) = slotIndex;
     }
 
-    return capturePipe_->IsochIO(slot->dataBuffer, slot->frameListBuffer, 0, slot->action);
+    __atomic_fetch_add(&isochInFlight_, 1, __ATOMIC_ACQ_REL);
+    result = capturePipe_->IsochIO(slot->dataBuffer, slot->frameListBuffer, 0, slot->action);
+    if (result != kIOReturnSuccess) {
+        __atomic_fetch_sub(&isochInFlight_, 1, __ATOMIC_ACQ_REL);
+    }
+    return result;
 }
 
 kern_return_t UA55UsbStream::SubmitPlaybackSlot(uint32_t slotIndex)
@@ -1179,11 +1437,17 @@ kern_return_t UA55UsbStream::SubmitPlaybackSlot(uint32_t slotIndex)
         *reinterpret_cast<uint32_t*>(slot->action->GetReference()) = slotIndex;
     }
 
-    return playbackPipe_->IsochIO(slot->dataBuffer, slot->frameListBuffer, 0, slot->action);
+    __atomic_fetch_add(&isochInFlight_, 1, __ATOMIC_ACQ_REL);
+    result = playbackPipe_->IsochIO(slot->dataBuffer, slot->frameListBuffer, 0, slot->action);
+    if (result != kIOReturnSuccess) {
+        __atomic_fetch_sub(&isochInFlight_, 1, __ATOMIC_ACQ_REL);
+    }
+    return result;
 }
 
 void UA55UsbStream::OnCaptureComplete(uint32_t slotIndex, IOReturn status)
 {
+    __atomic_fetch_sub(&isochInFlight_, 1, __ATOMIC_ACQ_REL);
     // Soft-stop: sai cedo se já não estamos em streaming (evita tocar slots a serem libertados).
     if (!streaming_) {
         return;
@@ -1218,6 +1482,7 @@ void UA55UsbStream::OnCaptureComplete(uint32_t slotIndex, IOReturn status)
 
 void UA55UsbStream::OnPlaybackComplete(uint32_t slotIndex, IOReturn status)
 {
+    __atomic_fetch_sub(&isochInFlight_, 1, __ATOMIC_ACQ_REL);
     if (!streaming_) {
         return;
     }
@@ -1266,11 +1531,11 @@ kern_return_t UA55UsbStream::StartStreaming()
     }
 
     for (uint32_t index = 0; index < kUA55IsochRingDepth; index++) {
-        kern_return_t result = PrepareIsochSlot(&captureSlots_[index], true, kUA55CaptureMaxPacketAlt1, index);
+        kern_return_t result = PrepareIsochSlot(&captureSlots_[index], true, rate_.captureMaxPacket, index);
         if (result != kIOReturnSuccess) {
             return result;
         }
-        result = PrepareIsochSlot(&playbackSlots_[index], false, kUA55PlaybackMaxPacketAlt1, index);
+        result = PrepareIsochSlot(&playbackSlots_[index], false, rate_.playbackMaxPacket, index);
         if (result != kIOReturnSuccess) {
             return result;
         }
@@ -1292,7 +1557,7 @@ kern_return_t UA55UsbStream::StartStreaming()
         *sampleTime_ = 0;
     }
     playbackPhase_ = 0;
-    lastCaptureAudioFrames_ = 44;
+    lastCaptureAudioFrames_ = rate_.nominalFramesPerTransfer;
     playbackReadSample_ = 0;
     captureWriteSample_ = 0;
     lastPublishedZts_ = 0;
@@ -1310,6 +1575,7 @@ kern_return_t UA55UsbStream::StartStreaming()
     captureErrors_ = 0;
     playbackErrors_ = 0;
     streaming_ = true;
+    streamedSinceOpen_ = true;
 
     for (uint32_t index = 0; index < kUA55IsochRingDepth; index++) {
         const kern_return_t result = SubmitCaptureSlot(index);
@@ -1327,7 +1593,8 @@ kern_return_t UA55UsbStream::StartStreaming()
         }
     }
 
-    os_log(OS_LOG_DEFAULT, "[UA55] UsbStream duplex started depth=%u", kUA55IsochRingDepth);
+    os_log(OS_LOG_DEFAULT, "[UA55] UsbStream duplex started rate=%u alt=%u depth=%u",
+           rate_.rateInt, rate_.alternate, kUA55IsochRingDepth);
     return kIOReturnSuccess;
 }
 
@@ -1340,12 +1607,20 @@ void UA55UsbStream::StopStreaming()
     const uint64_t caps = captureCompletions_;
     const uint64_t plays = playbackCompletions_;
 
-    // Soft-stop: NÃO usar Pipe::Abort. Abort no StopIO faz a UA-55 reenumerar
-    // (~2 s de I/O ≈ 2048 completions a 1 ms → device matched em loop no AMS).
-    // Preferir ClearTimestampTarget no StopIO e só chamar isto no teardown do device.
+    // Sem Pipe::Abort: Abort faz a UA-55 reenumerar. Espera os isoc
+    // em voo terminarem antes de libertar os slots.
     streaming_ = false;
     ClearTimestampTarget();
-    IOSleep(150);
+    const bool drained = DrainIsoch();
+    if (!drained) {
+        // A fila das completions está bloqueada por esta espera. Devolve
+        // o stream para os pacotes em voo se reencaminharem, em vez de
+        // abrir outro anel por cima.
+        streaming_ = true;
+        os_log(OS_LOG_DEFAULT, "[UA55] UsbStream isoch drain timeout inFlight=%u",
+               __atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE));
+        return;
+    }
 
     for (uint32_t index = 0; index < kUA55IsochRingDepth; index++) {
         FreeIsochSlot(&captureSlots_[index]);
@@ -1356,4 +1631,43 @@ void UA55UsbStream::StopStreaming()
            "[UA55] UsbStream soft-stopped captureCompletions=%llu playbackCompletions=%llu",
            caps,
            plays);
+}
+
+bool UA55UsbStream::FinishRateChangeDrain()
+{
+    const uint64_t caps = captureCompletions_;
+    const uint64_t plays = playbackCompletions_;
+    if (!DrainIsoch()) {
+        streaming_ = true;
+        os_log(OS_LOG_DEFAULT, "[UA55] rate change kept isoc, drain timeout inFlight=%u",
+               __atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE));
+        return false;
+    }
+
+    for (uint32_t index = 0; index < kUA55IsochRingDepth; index++) {
+        FreeIsochSlot(&captureSlots_[index]);
+        FreeIsochSlot(&playbackSlots_[index]);
+    }
+    os_log(OS_LOG_DEFAULT,
+           "[UA55] isoc drained for rate change capture=%llu playback=%llu",
+           caps,
+           plays);
+    return true;
+}
+
+void UA55UsbStream::BeginRateChangeQuiesce()
+{
+    streaming_ = false;
+    ClearTimestampTarget();
+}
+
+bool UA55UsbStream::DrainIsoch()
+{
+    for (uint32_t waited = 0; waited < 200; waited++) {
+        if (__atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE) == 0) {
+            return true;
+        }
+        IOSleep(1);
+    }
+    return __atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE) == 0;
 }

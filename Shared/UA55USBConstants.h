@@ -10,7 +10,7 @@ static const uint16_t kUA55ProductID = 0x012F;
 
 // Deve coincidir com CURRENT_PROJECT_VERSION no Xcode (log ao plugar).
 #ifndef UA55_DRIVER_BUILD
-#define UA55_DRIVER_BUILD 38
+#define UA55_DRIVER_BUILD 43
 #endif
 static const uint32_t kUA55DriverBuild = UA55_DRIVER_BUILD;
 
@@ -58,9 +58,47 @@ static const uint32_t kUA55IsochRingDepth = 8;
 static const uint32_t kUA55IsochFramesPerTransfer = 8;
 static const uint32_t kUA55IsochLogEveryCompletions = 250;
 
-// AudioDriverKit (marco 4): alt 1 @ 44.1 kHz, 4 out / 6 in, Float32 no HAL ↔ S32 24-in-32 no USB.
+// AudioDriverKit: 4 out / 6 in, Float32 no HAL ↔ S32 24-in-32 no USB.
+// Alts medidos: 1 = 44.1 kHz, 2 = 48 kHz, 3 = 96 kHz. Alt 4 é 192 kHz em 2 canais
+// e não entra nesta lista. Pacotes HS (8000 microframes/s): 44.1 varia 5–6 samples,
+// 48 é 6, 96 é 12. O maxPacket cobre +1 sample de folga async.
 static const double kUA55SampleRate = 44100.0;
 static const uint32_t kUA55SampleRateInt = 44100;
+
+struct UA55RateConfig {
+    double rate;
+    uint32_t rateInt;
+    uint8_t alternate;
+    uint16_t playbackMaxPacket;
+    uint16_t captureMaxPacket;
+    uint32_t samplesPerUframeMin;
+    uint32_t samplesPerUframeMax;
+    uint32_t nominalFramesPerTransfer;
+};
+
+static const uint32_t kUA55RateCount = 3;
+static const UA55RateConfig kUA55Rates[kUA55RateCount] = {
+    { 44100.0, 44100, 1, 112, 168, 5, 6, 44 },
+    { 48000.0, 48000, 2, 112, 168, 6, 6, 48 },
+    { 96000.0, 96000, 3, 208, 312, 12, 12, 96 },
+};
+
+inline const UA55RateConfig* UA55RateForHz(double hz)
+{
+    const UA55RateConfig* match = nullptr;
+    double best = 2.0;
+    for (uint32_t index = 0; index < kUA55RateCount; index++) {
+        double delta = hz - kUA55Rates[index].rate;
+        if (delta < 0.0) {
+            delta = -delta;
+        }
+        if (delta < best) {
+            best = delta;
+            match = &kUA55Rates[index];
+        }
+    }
+    return best < 1.0 ? match : nullptr;
+}
 static const uint32_t kUA55HighSpeedUframesPerSecond = 8000;
 static const uint32_t kUA55OutputChannels = 4;
 static const uint32_t kUA55InputChannels = 6;

@@ -1,11 +1,9 @@
 #pragma once
 
-// Marco 3: claim IF0/IF1 + SelectAlternateSetting(1) + IsochIO duplex async.
-// Nenhuma request vendor-specific é emitida.
-//
-// Endpoints e maxPacket do alt 1 vieram do dump [UA55] neste Mac.
-// Capture sync @ 44.1 kHz confirmado. Playback sync trava; usar async.
-//
-// OCTA-CAPTURE (0582:0120) é outro produto e não é reconhecida aqui.
+// Clock da QUAD-CAPTURE: request vendor 3, igual ao quirk ALSA
+// (OCTA/QUAD). Sem isto o alt USB muda e o hardware continua em 44.1 kHz:
+// a placa reinicia ou a captura fica em silêncio.
+// Leitura: 0xC0 / wValue 0x0001 → 3 bytes LE com a taxa.
+// Escrita: 0x40 / wValue 0x0008 → 0x40 + taxa em 24 bits LE.
 
-static const bool kUA55VendorRequestsEnabled = false;
+static const bool kUA55VendorRequestsEnabled = true;

@@ -20,8 +20,15 @@ public:
 
     kern_return_t Prepare(IOUSBHostDevice* device, IOService* client, UA55AudioDriver* actionOwner);
     void TearDown(IOService* client);
+    // Para o isoc se estiver a correr, escolhe o alt USB e reabre os pipes.
+    kern_return_t ApplySampleRate(uint32_t rateInt);
+    uint32_t CurrentRate() const { return rate_.rateInt; }
     kern_return_t StartStreaming();
     void StopStreaming();
+    // streaming_=false sem esperar. A espera fica noutra fila, para as
+    // completions poderem correr.
+    void BeginRateChangeQuiesce();
+    bool FinishRateChangeDrain();
 
     void SetTimestampTarget(volatile uint64_t* sampleTime, void* timestampTarget);
     void ClearTimestampTarget();
@@ -95,6 +102,8 @@ private:
     bool captureOpened_ = false;
     bool midiOpened_ = false;
     volatile bool streaming_ = false;
+    bool streamedSinceOpen_ = false;
+    uint32_t isochInFlight_ = 0;
     volatile bool statusPolling_ = false;
     volatile bool midiPolling_ = false;
     uint64_t midiCompletions_ = 0;
@@ -114,6 +123,8 @@ private:
     uint64_t playbackBytes_ = 0;
     uint64_t captureErrors_ = 0;
     uint64_t playbackErrors_ = 0;
+    UA55RateConfig rate_ = kUA55Rates[0];
+    uint32_t hardwareRate_ = 0;
     uint32_t playbackPhase_ = 0;
     uint32_t lastCaptureAudioFrames_ = 44;
     uint64_t playbackReadSample_ = 0;
@@ -152,6 +163,10 @@ private:
     kern_return_t StartStatusPolling();
     void StopStatusPolling();
     kern_return_t SubmitStatusSlot(uint32_t pipeIndex, uint32_t slotIndex);
+    kern_return_t OpenAudioPipes(uint8_t alternate);
+    bool DrainIsoch();
+    kern_return_t ReadHardwareRate(uint32_t* rateOut);
+    kern_return_t SetHardwareClock(uint32_t rateInt);
     kern_return_t PrepareMidiPipe();
     void TearDownMidiPipe(IOService* closer);
     kern_return_t StartMidiPolling();
