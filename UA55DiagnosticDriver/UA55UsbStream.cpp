@@ -515,6 +515,45 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
     return totalFrames;
 }
 
+void UA55UsbStream::SetOutputPairGain(uint32_t pair, float linearGain)
+{
+    if (pair > 1) {
+        return;
+    }
+    if (linearGain < 0.0f) {
+        linearGain = 0.0f;
+    } else if (linearGain > 1.0f) {
+        linearGain = 1.0f;
+    }
+    uint32_t bits = 0;
+    memcpy(&bits, &linearGain, sizeof(bits));
+    __atomic_store_n(&outputGainBits_[pair], bits, __ATOMIC_RELAXED);
+}
+
+void UA55UsbStream::SetOutputPairMuted(uint32_t pair, bool muted)
+{
+    if (pair > 1) {
+        return;
+    }
+    __atomic_store_n(&outputMutePair_[pair], muted ? 1u : 0u, __ATOMIC_RELAXED);
+}
+
+void UA55UsbStream::SetOutputMasterMuted(bool muted)
+{
+    __atomic_store_n(&outputMuteMaster_, muted ? 1u : 0u, __ATOMIC_RELAXED);
+}
+
+float UA55UsbStream::LoadOutputPairGain(uint32_t pair) const
+{
+    if (pair > 1) {
+        return 1.0f;
+    }
+    const uint32_t bits = __atomic_load_n(&outputGainBits_[pair], __ATOMIC_RELAXED);
+    float gain = 1.0f;
+    memcpy(&gain, &bits, sizeof(gain));
+    return gain;
+}
+
 void UA55UsbStream::HalWriteOutput(const float* outputRing,
                                    uint32_t ringFrames,
                                    uint64_t sampleTime,
@@ -523,13 +562,19 @@ void UA55UsbStream::HalWriteOutput(const float* outputRing,
     if (playbackBridge_ == nullptr || outputRing == nullptr || ringFrames == 0 || frameCount == 0) {
         return;
     }
+    const bool masterMuted = __atomic_load_n(&outputMuteMaster_, __ATOMIC_RELAXED) != 0;
+    const bool muteL = masterMuted || __atomic_load_n(&outputMutePair_[0], __ATOMIC_RELAXED) != 0;
+    const bool muteR = masterMuted || __atomic_load_n(&outputMutePair_[1], __ATOMIC_RELAXED) != 0;
+    const float gainL = muteL ? 0.0f : LoadOutputPairGain(0);
+    const float gainR = muteR ? 0.0f : LoadOutputPairGain(1);
+    const float channelGain[kUA55OutputChannels] = { gainL, gainR, gainL, gainR };
     for (uint32_t i = 0; i < frameCount; i++) {
         const uint32_t srcIndex = (uint32_t)((sampleTime + i) % ringFrames);
         const uint32_t dstIndex = (uint32_t)((sampleTime + i) % bridgeFrames_);
         const float* src = &outputRing[srcIndex * kUA55OutputChannels];
         int32_t* dst = &playbackBridge_[dstIndex * kUA55OutputChannels];
         for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
-            dst[ch] = FloatToS24In32(src[ch]);
+            dst[ch] = FloatToS24In32(src[ch] * channelGain[ch]);
         }
     }
     const uint64_t end = sampleTime + frameCount;

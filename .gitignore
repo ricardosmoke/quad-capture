@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Signing material stays on the machine that builds
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.cer
+*.pem
+
+# Private keys
+id_ed25519
+id_ed25519.pub
+
+# Local scratch
+tmp_audio_analysis/

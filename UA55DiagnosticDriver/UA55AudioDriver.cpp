@@ -32,6 +32,9 @@ bool UA55AudioDriver::init(void)
 void UA55AudioDriver::free(void)
 {
     if (ivars != nullptr) {
+        if (ivars->audioDevice.get() != nullptr) {
+            ivars->audioDevice->ConfigureHardware(0);
+        }
         if (ivars->usbStream != nullptr) {
             ivars->usbStream->TearDown(this);
             delete ivars->usbStream;
@@ -224,6 +227,9 @@ kern_return_t UA55AudioDriver::Stop_Impl(IOService* provider)
     os_log(OS_LOG_DEFAULT, "[UA55] Stop");
 
     if (ivars != nullptr) {
+        if (ivars->audioDevice.get() != nullptr) {
+            ivars->audioDevice->ConfigureHardware(0);
+        }
         if (ivars->usbStream != nullptr) {
             ivars->usbStream->TearDown(this);
             delete ivars->usbStream;

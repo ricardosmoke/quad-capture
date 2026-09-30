@@ -24,6 +24,9 @@
 		A1000000000000000000003F /* UA55AudioDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005A /* UA55AudioDevice.cpp */; };
 		A10000000000000000000040 /* UA55AudioDevice.iig in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005B /* UA55AudioDevice.iig */; };
 		A10000000000000000000090 /* UA55UsbStream.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005D /* UA55UsbStream.cpp */; };
+		A10000000000000000000091 /* UA55VolumeControl.iig in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005E /* UA55VolumeControl.iig */; };
+		A10000000000000000000092 /* UA55MuteControl.iig in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000005F /* UA55MuteControl.iig */; };
+		A10000000000000000000093 /* UA55OutputLevel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000060 /* UA55OutputLevel.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,6 +84,9 @@
 		A1000000000000000000005B /* UA55AudioDevice.iig */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.driverkit; lastKnownFileType = sourcecode.iig; path = UA55AudioDevice.iig; sourceTree = "<group>"; };
 		A1000000000000000000005C /* AudioDriverKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioDriverKit.framework; path = System/Library/Frameworks/AudioDriverKit.framework; sourceTree = SDKROOT; };
 		A1000000000000000000005D /* UA55UsbStream.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55UsbStream.cpp; sourceTree = "<group>"; };
+		A1000000000000000000005E /* UA55VolumeControl.iig */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.driverkit; lastKnownFileType = sourcecode.iig; path = UA55VolumeControl.iig; sourceTree = "<group>"; };
+		A1000000000000000000005F /* UA55MuteControl.iig */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.driverkit; lastKnownFileType = sourcecode.iig; path = UA55MuteControl.iig; sourceTree = "<group>"; };
+		A10000000000000000000060 /* UA55OutputLevel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55OutputLevel.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -147,6 +153,9 @@
 				A1000000000000000000005B /* UA55AudioDevice.iig */,
 				A1000000000000000000005A /* UA55AudioDevice.cpp */,
 				A1000000000000000000005D /* UA55UsbStream.cpp */,
+				A1000000000000000000005E /* UA55VolumeControl.iig */,
+				A1000000000000000000005F /* UA55MuteControl.iig */,
+				A10000000000000000000060 /* UA55OutputLevel.cpp */,
 				A10000000000000000000049 /* Info.plist */,
 				A1000000000000000000004A /* UA55DiagnosticDriver.entitlements */,
 			);
@@ -329,6 +338,9 @@
 				A10000000000000000000040 /* UA55AudioDevice.iig in Sources */,
 				A1000000000000000000003F /* UA55AudioDevice.cpp in Sources */,
 				A10000000000000000000090 /* UA55UsbStream.cpp in Sources */,
+				A10000000000000000000091 /* UA55VolumeControl.iig in Sources */,
+				A10000000000000000000092 /* UA55MuteControl.iig in Sources */,
+				A10000000000000000000093 /* UA55OutputLevel.cpp in Sources */,
 				A10000000000000000000036 /* UA55DescriptorWalk.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -398,7 +410,7 @@
 				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticApp/UA55DiagnosticApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 7PX7924N68;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -420,7 +432,7 @@
 				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticApp/UA55DiagnosticApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 7PX7924N68;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -442,7 +454,7 @@
 				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticDriver/UA55DiagnosticDriver.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 7PX7924N68;
 				DRIVERKIT_DEPLOYMENT_TARGET = 21.0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -469,7 +481,7 @@
 				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticDriver/UA55DiagnosticDriver.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 7PX7924N68;
 				DRIVERKIT_DEPLOYMENT_TARGET = 21.0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -495,7 +507,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 38;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Shared";
 				MARKETING_VERSION = 0.1.0;
@@ -511,7 +523,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 38;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Shared";
 				MARKETING_VERSION = 0.1.0;

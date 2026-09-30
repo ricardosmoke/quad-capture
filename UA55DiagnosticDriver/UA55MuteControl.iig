@@ -1,0 +1,23 @@
+#ifndef UA55MuteControl_h
+#define UA55MuteControl_h
+
+#include <AudioDriverKit/IOUserAudioBooleanControl.iig>
+
+class UA55MuteControl: public IOUserAudioBooleanControl
+{
+public:
+    virtual bool init(IOUserAudioDriver* in_driver,
+                      bool in_is_settable,
+                      bool in_control_value,
+                      IOUserAudioObjectPropertyElement in_control_element,
+                      IOUserAudioObjectPropertyScope in_control_scope,
+                      IOUserAudioClassID in_control_class_id) override;
+    virtual void free(void) override;
+
+    virtual kern_return_t HandleChangeControlValue(bool in_control_value) override;
+
+    // pairIndex 0 = esquerda, 1 = direita, 2 = os dois (elemento main).
+    virtual void BindStream(uint64_t usbStreamAddr, uint32_t pairIndex) LOCALONLY;
+};
+
+#endif

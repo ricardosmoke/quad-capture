@@ -9,7 +9,9 @@
 #include <AudioDriverKit/AudioDriverKit.h>
 
 #include "UA55AudioDevice.h"
+#include "UA55MuteControl.h"
 #include "UA55UsbStream.h"
+#include "UA55VolumeControl.h"
 #include "UA55USBConstants.h"
 
 using namespace AudioDriverKit;
@@ -25,6 +27,12 @@ struct UA55AudioDevice_IVars {
     OSSharedPtr<IOTimerDispatchSource> ztsTimer;
     OSSharedPtr<OSAction> ztsAction;
     UA55UsbStream* usbStream;
+    OSSharedPtr<UA55VolumeControl> volumeMain;
+    OSSharedPtr<UA55VolumeControl> volumeLeft;
+    OSSharedPtr<UA55VolumeControl> volumeRight;
+    OSSharedPtr<UA55MuteControl> muteMain;
+    OSSharedPtr<UA55MuteControl> muteLeft;
+    OSSharedPtr<UA55MuteControl> muteRight;
     volatile uint64_t sampleTime;
     uint64_t lastPublishedZts;
     uint64_t hostTicksPerPeriod;
@@ -48,6 +56,62 @@ IOUserAudioStreamBasicDescription MakeFloatFormat(uint32_t channels)
     format.mBitsPerChannel = 32;
     format.mReserved = 0;
     return format;
+}
+
+bool AddOutputVolume(UA55AudioDevice* device,
+                     IOUserAudioDriver* driver,
+                     uint32_t element,
+                     const char* name,
+                     OSSharedPtr<UA55VolumeControl>& slot)
+{
+    const IOUserAudioLevelControlRange range = { -96.0f, 0.0f };
+    auto control = OSSharedPtr(OSTypeAlloc(UA55VolumeControl), OSNoRetain);
+    if (control.get() == nullptr) {
+        return false;
+    }
+    if (!control->init(driver,
+                       true,
+                       0.0f,
+                       range,
+                       element,
+                       IOUserAudioObjectPropertyScope::Output,
+                       IOUserAudioClassID::VolumeControl)) {
+        return false;
+    }
+    auto label = OSSharedPtr(OSString::withCString(name), OSNoRetain);
+    control->SetName(label.get());
+    if (device->AddControl(control.get()) != kIOReturnSuccess) {
+        return false;
+    }
+    slot = control;
+    return true;
+}
+
+bool AddOutputMute(UA55AudioDevice* device,
+                   IOUserAudioDriver* driver,
+                   uint32_t element,
+                   const char* name,
+                   OSSharedPtr<UA55MuteControl>& slot)
+{
+    auto control = OSSharedPtr(OSTypeAlloc(UA55MuteControl), OSNoRetain);
+    if (control.get() == nullptr) {
+        return false;
+    }
+    if (!control->init(driver,
+                       true,
+                       false,
+                       element,
+                       IOUserAudioObjectPropertyScope::Output,
+                       IOUserAudioClassID::MuteControl)) {
+        return false;
+    }
+    auto label = OSSharedPtr(OSString::withCString(name), OSNoRetain);
+    control->SetName(label.get());
+    if (device->AddControl(control.get()) != kIOReturnSuccess) {
+        return false;
+    }
+    slot = control;
+    return true;
 }
 
 } // namespace
@@ -170,6 +234,18 @@ bool UA55AudioDevice::init(IOUserAudioDriver* in_driver,
         return false;
     }
 
+    // Elemento 0 = main; 1 e 2 = par estéreo preferido (slider do macOS).
+    const bool volumesOk =
+        AddOutputVolume(this, in_driver, 0, "Volume", ivars->volumeMain) &&
+        AddOutputVolume(this, in_driver, 1, "Volume Left", ivars->volumeLeft) &&
+        AddOutputVolume(this, in_driver, 2, "Volume Right", ivars->volumeRight) &&
+        AddOutputMute(this, in_driver, 0, "Mute", ivars->muteMain) &&
+        AddOutputMute(this, in_driver, 1, "Mute Left", ivars->muteLeft) &&
+        AddOutputMute(this, in_driver, 2, "Mute Right", ivars->muteRight);
+    if (!volumesOk) {
+        os_log(OS_LOG_DEFAULT, "[UA55] output volume controls failed — level stays full scale");
+    }
+
     error = SetIOOperationHandler(^kern_return_t(IOUserAudioObjectID,
                                                  IOUserAudioIOOperation operation,
                                                  uint32_t frameCount,
@@ -217,8 +293,9 @@ bool UA55AudioDevice::init(IOUserAudioDriver* in_driver,
     }
 
     os_log(OS_LOG_DEFAULT,
-           "[UA55] build=%u audio device configured 4out/6in @ 44.1 kHz (HAL ring=ZTS period)",
-           kUA55DriverBuild);
+           "[UA55] build=%u audio device configured 4out/6in @ 44.1 kHz volume=%d",
+           kUA55DriverBuild,
+           volumesOk ? 1 : 0);
     return true;
 }
 
@@ -250,10 +327,28 @@ void UA55AudioDevice::free(void)
 
 kern_return_t UA55AudioDevice::ConfigureHardware(uint64_t usbStreamAddr)
 {
-    if (ivars == nullptr || usbStreamAddr == 0) {
+    if (ivars == nullptr) {
         return kIOReturnBadArgument;
     }
     ivars->usbStream = reinterpret_cast<UA55UsbStream*>(usbStreamAddr);
+    if (ivars->volumeMain.get() != nullptr) {
+        ivars->volumeMain->BindStream(usbStreamAddr, 2);
+    }
+    if (ivars->volumeLeft.get() != nullptr) {
+        ivars->volumeLeft->BindStream(usbStreamAddr, 0);
+    }
+    if (ivars->volumeRight.get() != nullptr) {
+        ivars->volumeRight->BindStream(usbStreamAddr, 1);
+    }
+    if (ivars->muteMain.get() != nullptr) {
+        ivars->muteMain->BindStream(usbStreamAddr, 2);
+    }
+    if (ivars->muteLeft.get() != nullptr) {
+        ivars->muteLeft->BindStream(usbStreamAddr, 0);
+    }
+    if (ivars->muteRight.get() != nullptr) {
+        ivars->muteRight->BindStream(usbStreamAddr, 1);
+    }
     return kIOReturnSuccess;
 }
 

@@ -32,6 +32,12 @@ public:
     void HalWriteOutput(const float* outputRing, uint32_t ringFrames, uint64_t sampleTime, uint32_t frameCount);
     void HalReadInput(float* inputRing, uint32_t ringFrames, uint64_t sampleTime, uint32_t frameCount);
 
+    // Ganho digital da saída (slider / mute do macOS). pair 0 = L, 1 = R.
+    // Aplicado aos canais 1/3 (L) e 2/4 (R) antes do USB. Não mexe no knob da placa.
+    void SetOutputPairGain(uint32_t pair, float linearGain);
+    void SetOutputPairMuted(uint32_t pair, bool muted);
+    void SetOutputMasterMuted(bool muted);
+
     kern_return_t SubmitCaptureSlot(uint32_t slotIndex);
     kern_return_t SubmitPlaybackSlot(uint32_t slotIndex);
     void OnCaptureComplete(uint32_t slotIndex, IOReturn status);
@@ -120,6 +126,13 @@ private:
     uint64_t underruns_ = 0;
     uint64_t captureUnderruns_ = 0;
     uint64_t captureOverruns_ = 0;
+
+    // Bits de float, leitura atómica no thread de IO. 1.0f até o HAL mudar o volume.
+    uint32_t outputGainBits_[2] = { 0x3f800000u, 0x3f800000u };
+    uint32_t outputMutePair_[2] = { 0u, 0u };
+    uint32_t outputMuteMaster_ = 0u;
+
+    float LoadOutputPairGain(uint32_t pair) const;
 
     static void FreeIsochSlot(IsochSlot* slot);
     static void FreeStatusSlot(StatusSlot* slot);

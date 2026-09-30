@@ -1,0 +1,26 @@
+#ifndef UA55VolumeControl_h
+#define UA55VolumeControl_h
+
+#include <AudioDriverKit/IOUserAudioLevelControl.iig>
+
+class UA55VolumeControl: public IOUserAudioLevelControl
+{
+public:
+    virtual bool init(IOUserAudioDriver* in_driver,
+                      bool in_is_settable,
+                      float in_decibel_value,
+                      IOUserAudioLevelControlRange in_decibel_range,
+                      IOUserAudioObjectPropertyElement in_control_element,
+                      IOUserAudioObjectPropertyScope in_control_scope,
+                      IOUserAudioClassID in_control_class_id) override;
+    virtual void free(void) override;
+
+    virtual kern_return_t HandleChangeDecibelValue(float in_decibel_value) override;
+    virtual kern_return_t HandleChangeScalarValue(float in_scalar_value) override;
+
+    // pairIndex 0 = esquerda, 1 = direita, 2 = os dois (elemento main).
+    // usbStreamAddr 0 desliga o alvo (unplug).
+    virtual void BindStream(uint64_t usbStreamAddr, uint32_t pairIndex) LOCALONLY;
+};
+
+#endif

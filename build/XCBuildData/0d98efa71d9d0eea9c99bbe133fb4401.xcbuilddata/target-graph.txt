@@ -1,2 +1,0 @@
-Target dependency graph (1 target)
-Target 'UA55DiagnosticDriver' in project 'UA55Diagnostic' (no dependencies)
