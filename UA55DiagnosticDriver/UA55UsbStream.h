@@ -29,6 +29,9 @@ public:
     // completions poderem correr.
     void BeginRateChangeQuiesce();
     bool FinishRateChangeDrain();
+    // 96 kHz → 44.1: transmite silêncio em 48 kHz fora do Perform, depois
+    // deixa o USB já em 44.1. Dentro do Perform as completions não correm.
+    bool Warm44100From96000();
 
     void SetTimestampTarget(volatile uint64_t* sampleTime, void* timestampTarget);
     void ClearTimestampTarget();
@@ -127,6 +130,8 @@ private:
     uint32_t hardwareRate_ = 0;
     uint32_t playbackPhase_ = 0;
     uint32_t lastCaptureAudioFrames_ = 44;
+    uint8_t captureUframeSamples_[kUA55IsochFramesPerTransfer] = {};
+    bool capturePatternValid_ = false;
     uint64_t playbackReadSample_ = 0;
     uint64_t captureWriteSample_ = 0;
     uint64_t lastPublishedZts_ = 0;
@@ -164,6 +169,7 @@ private:
     void StopStatusPolling();
     kern_return_t SubmitStatusSlot(uint32_t pipeIndex, uint32_t slotIndex);
     kern_return_t OpenAudioPipes(uint8_t alternate);
+    void PrimeStreamingSilently(uint32_t milliseconds);
     bool DrainIsoch();
     kern_return_t ReadHardwareRate(uint32_t* rateOut);
     kern_return_t SetHardwareClock(uint32_t rateInt);

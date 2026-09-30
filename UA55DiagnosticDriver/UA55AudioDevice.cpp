@@ -459,6 +459,14 @@ kern_return_t UA55AudioDevice::HandleChangeSampleRate(double in_sample_rate)
                 device->ivars->rateChangeInFlight = false;
                 return;
             }
+            const UA55RateConfig* pending = UA55RateForHz(device->ivars->pendingRate);
+            if (pending != nullptr && pending->rateInt == 44100 &&
+                device->ivars->usbStream->CurrentRate() == 96000) {
+                if (!device->ivars->usbStream->Warm44100From96000()) {
+                    device->ivars->rateChangeInFlight = false;
+                    return;
+                }
+            }
             const kern_return_t queued =
                 device->RequestDeviceConfigurationChange(kUA55ConfigChangeSampleRate, nullptr);
             if (queued != kIOReturnSuccess) {

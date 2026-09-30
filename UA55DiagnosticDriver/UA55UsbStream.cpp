@@ -307,6 +307,8 @@ uint32_t UA55UsbStream::UnpackCaptureToBridge(IsochSlot* slot)
     const uint32_t bytesPerAudioFrame = kUA55InputChannels * kUA55BytesPerSample;
     uint32_t byteOffset = 0;
     uint32_t totalAudioFrames = 0;
+    uint8_t uframeSamples[kUA55IsochFramesPerTransfer];
+    bool patternOk = true;
 
     for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
         const uint32_t complete = frames[index].completeCount;
@@ -314,8 +316,9 @@ uint32_t UA55UsbStream::UnpackCaptureToBridge(IsochSlot* slot)
             ? frames[index].requestCount
             : rate_.captureMaxPacket;
 
+        uint32_t nFrames = 0;
         if (complete >= bytesPerAudioFrame && (complete % bytesPerAudioFrame) == 0) {
-            const uint32_t nFrames = complete / bytesPerAudioFrame;
+            nFrames = complete / bytesPerAudioFrame;
             const int32_t* src = reinterpret_cast<const int32_t*>(data + byteOffset);
             for (uint32_t frame = 0; frame < nFrames; frame++) {
                 const uint32_t ringIndex =
@@ -328,7 +331,10 @@ uint32_t UA55UsbStream::UnpackCaptureToBridge(IsochSlot* slot)
             }
             totalAudioFrames += nFrames;
         }
-
+        if (nFrames < rate_.samplesPerUframeMin || nFrames > rate_.samplesPerUframeMax) {
+            patternOk = false;
+        }
+        uframeSamples[index] = (uint8_t)nFrames;
         byteOffset += request;
     }
 
@@ -337,6 +343,12 @@ uint32_t UA55UsbStream::UnpackCaptureToBridge(IsochSlot* slot)
     const uint32_t maxTransfer = rate_.samplesPerUframeMax * kUA55IsochFramesPerTransfer;
     if (totalAudioFrames >= minTransfer && totalAudioFrames <= maxTransfer) {
         lastCaptureAudioFrames_ = totalAudioFrames;
+        if (patternOk) {
+            for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
+                captureUframeSamples_[index] = uframeSamples[index];
+            }
+            capturePatternValid_ = true;
+        }
     }
     MaybePublishZts();
     return totalAudioFrames;
@@ -455,12 +467,18 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
 
     const uint32_t minSamples = rate_.samplesPerUframeMin;
     const uint32_t maxSamples = rate_.samplesPerUframeMax;
-    const uint32_t minTransfer = minSamples * kUA55IsochFramesPerTransfer;
-    const uint32_t maxTransfer = maxSamples * kUA55IsochFramesPerTransfer;
 
-    uint32_t remaining = 0;
-    if (minSamples == maxSamples) {
-        remaining = minTransfer;
+    // 44.1 kHz: copiar o tamanho de cada microframe da captura. Somar e
+    // redistribuir (e o ±1 de drift) desalinha o DAC e enfia zeros no OUT.
+    uint32_t planned[kUA55IsochFramesPerTransfer];
+    if (minSamples != maxSamples && capturePatternValid_) {
+        for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
+            planned[index] = captureUframeSamples_[index];
+        }
+    } else if (minSamples == maxSamples) {
+        for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
+            planned[index] = minSamples;
+        }
     } else {
         for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
             playbackPhase_ += rate_.rateInt;
@@ -471,38 +489,13 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
             } else if (samples > maxSamples) {
                 samples = maxSamples;
             }
-            remaining += samples;
-        }
-    }
-    if (lastCaptureAudioFrames_ >= minTransfer && lastCaptureAudioFrames_ <= maxTransfer) {
-        remaining = lastCaptureAudioFrames_;
-    }
-    if (minSamples != maxSamples) {
-        if (drift < -16) {
-            remaining += 1u;
-        } else if (drift > 16 && remaining > minTransfer) {
-            remaining -= 1u;
-        }
-        if (remaining < minTransfer) {
-            remaining = minTransfer;
-        } else if (remaining > maxTransfer) {
-            remaining = maxTransfer;
+            planned[index] = samples;
         }
     }
 
     uint32_t playbackConsumed = 0;
     for (uint32_t index = 0; index < kUA55IsochFramesPerTransfer; index++) {
-        const uint32_t uframesLeft = kUA55IsochFramesPerTransfer - index;
-        uint32_t samples = remaining / uframesLeft;
-        if (samples < minSamples) {
-            samples = minSamples;
-        } else if (samples > maxSamples) {
-            samples = maxSamples;
-        }
-        if (samples > remaining) {
-            samples = remaining;
-        }
-        remaining -= samples;
+        const uint32_t samples = planned[index];
 
         frames[index].status = (IOReturn)kIOReturnInvalid;
         frames[index].requestCount = (uint16_t)(samples * bytesPerFrame);
@@ -520,12 +513,20 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
                 consumedHere++;
                 continue;
             }
-            // Sem HAL ativo (pause) ou ainda sem WriteEnd: silêncio, sem contar underrun.
-            if (timestampTarget_ == nullptr || halWriteSample_ == 0) {
+            // Pause: silêncio e avança, para não repetir o áudio antigo.
+            // Sem WriteEnd ainda: silêncio sem avançar, senão a leitura
+            // larga na frente do HAL e o pacote seguinte sai zerado.
+            if (timestampTarget_ == nullptr) {
                 for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
                     dst[ch] = 0;
                 }
                 consumedHere++;
+                continue;
+            }
+            if (halWriteSample_ == 0) {
+                for (uint32_t ch = 0; ch < kUA55OutputChannels; ch++) {
+                    dst[ch] = 0;
+                }
                 continue;
             }
             const uint64_t absSample = playbackReadSample_ + playbackConsumed + consumedHere;
@@ -822,6 +823,22 @@ kern_return_t UA55UsbStream::ApplySampleRate(uint32_t rateInt)
         return kIOReturnUnsupported;
     }
     gUA55DesiredRateHz = mode->rateInt;
+    // 96 ↔ 44.1 não é uma oitava. O clock passa por 48 kHz. Transmitir
+    // silêncio nessa passagem NÃO pode ser aqui: o Perform segura as
+    // completions e o isoc nunca drena.
+    const bool via48 =
+        (rate_.rateInt == 96000 && mode->rateInt == 44100) ||
+        (rate_.rateInt == 44100 && mode->rateInt == 96000);
+    if (via48) {
+        const uint32_t finalRate = mode->rateInt;
+        os_log(OS_LOG_DEFAULT, "[UA55] sample rate via 48000 before %u", finalRate);
+        const kern_return_t step = ApplySampleRate(48000);
+        gUA55DesiredRateHz = finalRate;
+        if (step != kIOReturnSuccess) {
+            return step;
+        }
+        streamedSinceOpen_ = true;
+    }
     if (rate_.rateInt == mode->rateInt &&
         hardwareRate_ == mode->rateInt &&
         playbackPipe_ != nullptr &&
@@ -864,12 +881,44 @@ kern_return_t UA55UsbStream::ApplySampleRate(uint32_t rateInt)
     rate_ = *mode;
     playbackPhase_ = 0;
     lastCaptureAudioFrames_ = mode->nominalFramesPerTransfer;
+    capturePatternValid_ = false;
     os_log(OS_LOG_DEFAULT, "[UA55] sample rate %u Hz alt=%u packets out=%u in=%u",
            mode->rateInt,
            mode->alternate,
            mode->playbackMaxPacket,
            mode->captureMaxPacket);
     return kIOReturnSuccess;
+}
+
+void UA55UsbStream::PrimeStreamingSilently(uint32_t milliseconds)
+{
+    if (StartStreaming() != kIOReturnSuccess) {
+        os_log(OS_LOG_DEFAULT, "[UA55] sample rate prime start failed");
+        return;
+    }
+    IOSleep(milliseconds);
+    StopStreaming();
+    os_log(OS_LOG_DEFAULT, "[UA55] sample rate prime stopped inFlight=%u",
+           __atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE));
+}
+
+bool UA55UsbStream::Warm44100From96000()
+{
+    if (rate_.rateInt != 96000) {
+        return true;
+    }
+    os_log(OS_LOG_DEFAULT, "[UA55] sample rate warm 48000 before 44100");
+    if (ApplySampleRate(48000) != kIOReturnSuccess) {
+        return false;
+    }
+    // Nesta fila as completions USB correm. Dentro do Perform, não.
+    PrimeStreamingSilently(50);
+    if (streaming_ || __atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE) != 0) {
+        os_log(OS_LOG_DEFAULT, "[UA55] sample rate warm did not stop inFlight=%u",
+               __atomic_load_n(&isochInFlight_, __ATOMIC_ACQUIRE));
+        return false;
+    }
+    return ApplySampleRate(44100) == kIOReturnSuccess;
 }
 
 kern_return_t UA55UsbStream::Prepare(IOUSBHostDevice* device, IOService* client, UA55AudioDriver* actionOwner)
@@ -1558,6 +1607,13 @@ kern_return_t UA55UsbStream::StartStreaming()
     }
     playbackPhase_ = 0;
     lastCaptureAudioFrames_ = rate_.nominalFramesPerTransfer;
+    capturePatternValid_ = false;
+    if (playbackBridge_ != nullptr) {
+        memset(playbackBridge_, 0, (size_t)bridgeFrames_ * kUA55OutputChannels * sizeof(int32_t));
+    }
+    if (captureBridge_ != nullptr) {
+        memset(captureBridge_, 0, (size_t)bridgeFrames_ * kUA55InputChannels * sizeof(int32_t));
+    }
     playbackReadSample_ = 0;
     captureWriteSample_ = 0;
     lastPublishedZts_ = 0;
