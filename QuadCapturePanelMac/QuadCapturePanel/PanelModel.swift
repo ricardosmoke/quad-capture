@@ -28,7 +28,6 @@ final class PanelModel: ObservableObject {
         var mixOutput: Double = 0.7
         var mixInput1: Double = 0.65
         var mixInput2: Double = 0.65
-        var mixCoax: Double = 0.4
         var pre1: CGFloat = 0
         var pre1Peak: CGFloat = 0
         var pre2: CGFloat = 0
@@ -74,7 +73,6 @@ final class PanelModel: ObservableObject {
         s.mixOutput = mixOutput
         s.mixInput1 = mixInput1
         s.mixInput2 = mixInput2
-        s.mixCoax = mixCoax
         s.pre1 = preampLevel(0)
         s.pre1Peak = preampPeak(0)
         s.pre2 = preampLevel(1)
@@ -198,5 +196,5 @@ enum KnobID: Hashable {
     case sens1, sens2
     case comp1Gate, comp1Threshold, comp1Ratio, comp1Attack, comp1Release, comp1Gain
     case comp2Gate, comp2Threshold, comp2Ratio, comp2Attack, comp2Release, comp2Gain
-    case mixOutput, mixInput1, mixInput2, mixCoax
+    case mixOutput, mixInput1, mixInput2
 }

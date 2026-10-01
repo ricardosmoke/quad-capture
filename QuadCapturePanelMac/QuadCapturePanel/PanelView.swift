@@ -34,7 +34,7 @@ struct PanelView: View {
     }
 }
 
-// MARK: - Layout / hit targets (coordenadas do design 1080×592)
+// MARK: - Layout / hit targets (coordenadas do design 930×592)
 
 struct KnobSpec {
     let id: KnobID
@@ -71,24 +71,23 @@ struct PanelLayout {
         KnobSpec(id: .sens1, cx: 8 + 72, cy: 38 + 40 + 124, radius: 22, interactive: false),
         KnobSpec(id: .sens2, cx: 8 + 72, cy: 38 + 318 + 124, radius: 22, interactive: false),
         // COMP 1
-        KnobSpec(id: .comp1Gate, cx: 292 + 36 + 0 * 76, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Threshold, cx: 292 + 36 + 1 * 76, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Ratio, cx: 292 + 36 + 2 * 76, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Attack, cx: 292 + 36 + 3 * 76, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Release, cx: 292 + 36 + 4 * 76, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Gain, cx: 292 + 36 + 5 * 76, cy: 78 + 164, radius: 18),
+        KnobSpec(id: .comp1Gate, cx: 252 + 32 + 0 * 62, cy: 78 + 164, radius: 18),
+        KnobSpec(id: .comp1Threshold, cx: 252 + 32 + 1 * 62, cy: 78 + 164, radius: 18),
+        KnobSpec(id: .comp1Ratio, cx: 252 + 32 + 2 * 62, cy: 78 + 164, radius: 18),
+        KnobSpec(id: .comp1Attack, cx: 252 + 32 + 3 * 62, cy: 78 + 164, radius: 18),
+        KnobSpec(id: .comp1Release, cx: 252 + 32 + 4 * 62, cy: 78 + 164, radius: 18),
+        KnobSpec(id: .comp1Gain, cx: 252 + 32 + 5 * 62, cy: 78 + 164, radius: 18),
         // COMP 2
-        KnobSpec(id: .comp2Gate, cx: 292 + 36 + 0 * 76, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Threshold, cx: 292 + 36 + 1 * 76, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Ratio, cx: 292 + 36 + 2 * 76, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Attack, cx: 292 + 36 + 3 * 76, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Release, cx: 292 + 36 + 4 * 76, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Gain, cx: 292 + 36 + 5 * 76, cy: 324 + 164, radius: 18),
+        KnobSpec(id: .comp2Gate, cx: 252 + 32 + 0 * 62, cy: 324 + 164, radius: 18),
+        KnobSpec(id: .comp2Threshold, cx: 252 + 32 + 1 * 62, cy: 324 + 164, radius: 18),
+        KnobSpec(id: .comp2Ratio, cx: 252 + 32 + 2 * 62, cy: 324 + 164, radius: 18),
+        KnobSpec(id: .comp2Attack, cx: 252 + 32 + 3 * 62, cy: 324 + 164, radius: 18),
+        KnobSpec(id: .comp2Release, cx: 252 + 32 + 4 * 62, cy: 324 + 164, radius: 18),
+        KnobSpec(id: .comp2Gain, cx: 252 + 32 + 5 * 62, cy: 324 + 164, radius: 18),
         // MIXER
-        KnobSpec(id: .mixOutput, cx: 796 + 276 / 2, cy: 38 + 268, radius: 22),
-        KnobSpec(id: .mixInput1, cx: 796 + 276 / 2, cy: 38 + 348, radius: 22),
-        KnobSpec(id: .mixInput2, cx: 796 + 276 / 2, cy: 38 + 430, radius: 22),
-        KnobSpec(id: .mixCoax, cx: 796 + 276 / 2, cy: 38 + 500, radius: 18),
+        KnobSpec(id: .mixOutput, cx: 694 + 228 / 2, cy: 38 + 268, radius: 22),
+        KnobSpec(id: .mixInput1, cx: 694 + 228 / 2, cy: 38 + 348, radius: 22),
+        KnobSpec(id: .mixInput2, cx: 694 + 228 / 2, cy: 38 + 430, radius: 22),
     ]
 }
 
@@ -142,7 +141,6 @@ extension PanelModel {
         case .mixOutput: return Binding(get: { self.mixOutput }, set: { self.mixOutput = $0 })
         case .mixInput1: return Binding(get: { self.mixInput1 }, set: { self.mixInput1 = $0 })
         case .mixInput2: return Binding(get: { self.mixInput2 }, set: { self.mixInput2 = $0 })
-        case .mixCoax: return Binding(get: { self.mixCoax }, set: { self.mixCoax = $0 })
         }
     }
 }
@@ -150,7 +148,7 @@ extension PanelModel {
 // MARK: - Canvas
 
 enum PanelCanvas {
-    static let designWidth: CGFloat = 1080
+    static let designWidth: CGFloat = 930
     static let designHeight: CGFloat = 592
 
     static let metal = Color(hex: 0x3A3A3A)
@@ -173,23 +171,23 @@ enum PanelCanvas {
         context.scaleBy(x: scale, y: scale)
 
         header(&context)
-        preamp(&context, 8, 38, 268, 520, state: state)
-        compressor(&context, 282, 38, 508, 520, state: state)
-        mixer(&context, 796, 38, 276, 520, state: state)
+        preamp(&context, 8, 38, 228, 520, state: state)
+        compressor(&context, 242, 38, 446, 520, state: state)
+        mixer(&context, 694, 38, 228, 520, state: state)
         footer(&context, state: state)
     }
 
     private static func header(_ context: inout GraphicsContext) {
         fill(&context, rect(0, 0, designWidth, 36), Color(hex: 0x323232))
         var plate = Path()
-        plate.move(to: point(742, 2))
-        plate.addLine(to: point(786, 34))
-        plate.addLine(to: point(1072, 34))
-        plate.addLine(to: point(1072, 2))
+        plate.move(to: point(592, 2))
+        plate.addLine(to: point(636, 34))
+        plate.addLine(to: point(922, 34))
+        plate.addLine(to: point(922, 2))
         plate.closeSubpath()
         context.fill(plate, with: .color(Color(hex: 0x4E4E4E)))
         context.stroke(plate, with: .color(Color(hex: 0x8A8A8A)), lineWidth: 1)
-        text(&context, "QUAD-CAPTURE", 800, 2, 260, 32, 18, ink, bold: true)
+        text(&context, "QUAD-CAPTURE", 650, 2, 260, 32, 18, ink, bold: true)
     }
 
     private static func preamp(
@@ -228,7 +226,7 @@ enum PanelCanvas {
         text(&context, number, x, y + 36, 28, 40, 28, ink, bold: true)
         button(&context, x + 36, y + 8, 72, 30, "LO-CUT", gray: false)
         button(&context, x + 36, y + 44, 72, 26, "PHASE", gray: false)
-        meter(&context, x + 168, y + 4, 118, level, peak: peak, showClip: true)
+        meter(&context, x + 118, y + 4, 118, level, peak: peak, showClip: true)
         text(&context, "SENS", x + 36, y + 78, 72, 16, 10, label, bold: false)
         knob(&context, x + 72, y + 124, 22, sensAngle)
         lcd(&context, x + 40, y + 156, 68, 26, sens)
@@ -257,14 +255,14 @@ enum PanelCanvas {
         button(&context, x, y + 18, 70, 32, "BYPASS", gray: strip.bypass)
         text(&context, "GR", x + 78, y, 36, 14, 10, label, bold: true)
         meter(&context, x + 84, y + 16, 100, gr, peak: gr, showClip: false)
-        graph(&context, x + 132, y + 8, 210, 108, strip: strip)
-        meter(&context, x + 400, y + 8, 116, out, peak: outPeak, showClip: true)
+        graph(&context, x + 136, y + 8, 220, 108, strip: strip)
+        meter(&context, x + 368, y + 8, 116, out, peak: outPeak, showClip: true)
 
         let labels = ["GATE", "THRESHOLD", "RATIO", "ATTACK", "RELEASE", "GAIN"]
         let values = [strip.gate, strip.threshold, strip.ratio, strip.attack, strip.release, strip.gain]
         for index in labels.indices {
-            let cx = x + 36 + CGFloat(index) * 76
-            text(&context, labels[index], cx - 40, y + 122, 80, 14, 9, label, bold: false)
+            let cx = x + 32 + CGFloat(index) * 62
+            text(&context, labels[index], cx - 30, y + 122, 60, 14, 9, label, bold: false)
             knob(&context, cx, y + 164, 18, PanelModel.knobAngle(values[index]))
         }
     }
@@ -283,8 +281,6 @@ enum PanelCanvas {
         knob(&context, x + w / 2, y + 348, 22, PanelModel.knobAngle(state.mixInput1))
         text(&context, "INPUT 2", x, y + 374, w, 16, 12, label, bold: true)
         knob(&context, x + w / 2, y + 430, 22, PanelModel.knobAngle(state.mixInput2))
-        text(&context, "COAX (3/4)", x, y + 456, w, 16, 12, label, bold: true)
-        knob(&context, x + w / 2, y + 500, 18, PanelModel.knobAngle(state.mixCoax))
     }
 
     private static func footer(_ context: inout GraphicsContext, state: PanelModel.DrawState) {
@@ -307,11 +303,11 @@ enum PanelCanvas {
         text(&context, "INTERNAL", 360, footerY, 120, 34, 14, clock, bold: true, left: true)
 
         let live = state.connected
-        fill(&context, circle(980, footerY + 17, 5), live ? lcdGreen : Color(hex: 0xFF3A32))
+        fill(&context, circle(830, footerY + 17, 5), live ? lcdGreen : Color(hex: 0xFF3A32))
         text(
             &context,
             live ? "IN LIVE" : "OFFLINE",
-            990, footerY, 70, 34, 11, live ? lcdGreen : Color(hex: 0xFF8A80),
+            840, footerY, 70, 34, 11, live ? lcdGreen : Color(hex: 0xFF8A80),
             bold: true, left: true)
     }
 
