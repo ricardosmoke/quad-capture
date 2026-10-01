@@ -28,7 +28,7 @@ enum HardwareGain {
         SensFeed.shared.read()
     }
 
-    /// Última mensagem da placa que não é o ganho. "—" até chegar alguma.
+    /// "on", "off" ou "—" se o botão AUTO SENS da placa ainda não falou.
     static func deviceText() -> String {
         SensFeed.shared.deviceText()
     }
@@ -150,7 +150,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "show", "--last", "10m", "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] midi""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1""#
         ]
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -190,7 +190,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "stream", "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] midi""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1""#
         ]
         let output = FileHandle(fileDescriptor: replica, closeOnDealloc: false)
         process.standardOutput = output
@@ -246,25 +246,33 @@ private final class SensFeed: @unchecked Sendable {
         }
     }
 
-    /// true quando chega um DT1 ou MIDI que não é o ganho.
+    /// true quando o AUTO SENS da placa muda. "on" / "off".
     private func applyDevice(_ message: String) -> Bool {
-        let marker: String
-        if message.contains("[UA55] dt1 ") {
-            marker = "[UA55] dt1 "
-        } else if message.contains("[UA55] midi ") {
-            marker = "[UA55] midi "
+        let state: String
+        if message.contains("[UA55] autosens on") {
+            state = "on"
+        } else if message.contains("[UA55] autosens off") {
+            state = "off"
+        } else if message.contains("[UA55] dt1 ") {
+            guard let range = message.range(of: "[UA55] dt1 ") else { return false }
+            let hex = message[range.upperBound...].split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+            switch hex {
+            case "0002010201", "0002010302":
+                state = "on"
+            case "0002010202", "0002010300":
+                state = "off"
+            default:
+                return false
+            }
         } else {
             return false
         }
-        guard let range = message.range(of: marker) else { return false }
-        let hex = message[range.upperBound...].split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
-        guard !hex.isEmpty else { return false }
         lock.lock()
         defer { lock.unlock() }
-        if device == hex {
+        if device == state {
             return false
         }
-        device = hex
+        device = state
         return true
     }
 

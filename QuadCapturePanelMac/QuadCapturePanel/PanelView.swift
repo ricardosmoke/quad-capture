@@ -214,8 +214,7 @@ enum PanelCanvas {
             level: state.pre1, peak: state.pre1Peak)
         button(
             &context, x + 160, y + 244, 96, 40,
-            "AUTO SENS", caption: PanelCanvas.spacedHex(state.autoSensText),
-            gray: state.autoSensText == "—")
+            "AUTO SENS", gray: state.autoSensText != "on")
         channel(
             &context, x + 8, y + 286, "2", state.sens2Text, PanelModel.knobAngle(state.sens2),
             level: state.pre2, peak: state.pre2Peak)
@@ -342,19 +341,6 @@ enum PanelCanvas {
             text(&context, label, x, y + 2, w, h / 2, 9, Color(hex: 0x2A2A2A), bold: true)
             text(&context, caption, x, y + h / 2 - 2, w, h / 2, 8, Color(hex: 0x2A2A2A), bold: false)
         }
-    }
-
-    /// `00020102` vira `00 02 01 02`. Cabe no botão.
-    static func spacedHex(_ hex: String) -> String {
-        guard hex != "—" else { return hex }
-        var parts: [String] = []
-        var index = hex.startIndex
-        while index < hex.endIndex && parts.count < 6 {
-            let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex) ?? hex.endIndex
-            parts.append(String(hex[index..<next]))
-            index = next
-        }
-        return parts.joined(separator: " ")
     }
 
     private static func knob(_ context: inout GraphicsContext, _ cx: CGFloat, _ cy: CGFloat, _ radius: CGFloat, _ angleDegrees: CGFloat) {

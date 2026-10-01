@@ -1421,9 +1421,20 @@ void UA55UsbStream::HandleSysEx(const uint8_t* msg, uint32_t length)
     const uint32_t dataBytes = length - 13;
     // 00 05 <canal> 04 = SENS daquele preamp. O byte vai de 0 a 127
     // (máximo de um byte MIDI); acima de 54 continua o mesmo ganho.
-    // Qualquer outro DT1 é o estado da placa (AUTO SENS inclusive). Só se escuta.
+    // 00 02 01 03 = AUTO SENS: 02 ligado, 00 desligado. O par 00 02 01 02
+    // chega junto e não é outro comando. Cada toque repete os mesmos bytes,
+    // então não passa pelo filtro que esconde DT1 já visto.
     const bool sens = dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x05 && addr[3] == 0x04
         && addr[2] <= 1 && data <= 127;
+    if (dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x02 && addr[2] == 0x01 && addr[3] == 0x02
+        && (data == 0x01 || data == 0x02)) {
+        return;
+    }
+    if (dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x02 && addr[2] == 0x01 && addr[3] == 0x03
+        && (data == 0x02 || data == 0x00)) {
+        os_log(OS_LOG_DEFAULT, "[UA55] autosens %{public}s", data == 0x02 ? "on" : "off");
+        return;
+    }
     if (!sens) {
         uint8_t packed[12] = {};
         const uint32_t copyData = dataBytes > 8 ? 8 : dataBytes;
