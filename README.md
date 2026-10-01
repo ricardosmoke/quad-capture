@@ -2,9 +2,9 @@
 
 An **experimental** open-source audio driver for the [Roland QUAD-CAPTURE](https://www.roland.com/global/products/quad-capture/) USB interface on **Apple Silicon Macs**.
 
-Roland’s original Mac driver is old and no longer a good fit for modern macOS. This project aims to make the interface usable again: plug it in, see it in macOS, play and record audio.
+Roland’s original Mac driver is old and no longer a good fit for modern macOS. This project aims to make the interface usable again: plug it in, see it in macOS, play and record audio, and watch the hardware preamp knobs on screen.
 
-> **Status:** Works for day-to-day playback and recording at **44.1 kHz** (stable build **34**).  
+> **Status:** Playback and recording work at **44.1, 48, and 96 kHz** (4 out / 6 in) and at **192 kHz** (2 out / 2 in). Current driver build **55**.  
 > This is **not** an official Roland product. Use at your own risk.
 
 ---
@@ -14,41 +14,43 @@ Roland’s original Mac driver is old and no longer a good fit for modern macOS.
 | | |
 | --- | --- |
 | **Device name in macOS** | `QUAD-CAPTURE UA-55` |
-| **Outputs** | 4 channels |
-| **Inputs** | 6 channels (mics + other inputs) |
-| **Sample rate** | 44.1 kHz (for now) |
+| **44.1 / 48 / 96 kHz** | 4 outputs, 6 inputs |
+| **192 kHz** | 2 outputs, 2 inputs (the interface only offers that rate in stereo) |
+| **Output volume** | Main, left, and right controls in macOS |
 | **Where it shows up** | Audio MIDI Setup, System Settings → Sound, GarageBand, Logic, etc. |
+| **On-screen panel** | Mirrors the hardware SENS knobs (0–54 dB) and the AUTO SENS button |
 
-In plain terms: after you install the driver, the QUAD-CAPTURE should behave like a normal Mac audio device—you can listen through it and record into it.
+In plain terms: after you install the driver, the QUAD-CAPTURE should behave like a normal Mac audio device. You can listen through it, record into it, and change the sample rate from Audio MIDI Setup.
 
 ---
 
 ## What it does *not* do (yet)
 
-- **No 48 / 96 / 192 kHz** — only 44.1 kHz in this cut  
-- **No replacement for Roland’s Control Panel** — software control of preamp gain (SENS knobs), compressors, etc. is not ready  
-- **Not signed for mass distribution** — you need an Apple Developer account and to approve a system extension on your Mac  
-- **Apple Silicon only** — not aimed at Intel Macs  
+- **No full Roland Control Panel.** The companion app only *displays* what the box already does. It does not change preamp gain, compressor, mixer, or any other setting on the hardware. Nothing is sent to the interface.
+- **On-screen compressor and mixer knobs are local.** They do not follow or drive the box. The sample-rate line on the panel is a label, not the live clock.
+- **Not signed for mass distribution.** You need an Apple Developer account and must approve a system extension on your Mac.
+- **Apple Silicon only.** Not aimed at Intel Macs.
 
-Physical SENS knobs on the box still work the usual way (they’re analog). The on-screen “control panel” app in this repo is a separate experiment and does **not** drive those knobs yet.
+The physical SENS knobs still set the gain. The panel reads that gain from the driver and shows one decibel for every two device counts (a raw byte of 108 is 54 dB, the hardware maximum).
 
 ---
 
 ## How it works (short version)
 
-1. A small **installer app** loads a **DriverKit system extension** (a sandboxed driver Apple allows on modern macOS).  
-2. The driver talks to the interface over **USB** and registers it with **Core Audio**.  
-3. macOS apps send/receive normal audio; the driver converts it to the format the hardware expects.
+1. A small **installer app** loads a **DriverKit system extension** (a sandboxed driver Apple allows on modern macOS).
+2. The driver talks to the interface over **USB** and registers it with **Core Audio**.
+3. macOS apps send and receive normal audio; the driver converts it to the format the hardware expects.
+4. When a SENS knob or the AUTO SENS button moves, the driver logs it. **QuadCapturePanel** reads that log and updates the matching control.
 
-You don’t need to understand USB or DriverKit to use it—but if something fails, the steps below help you check that the extension is actually active.
+You don’t need to understand USB or DriverKit to use it. If something fails, the steps below help you check that the extension is actually active.
 
 ---
 
 ## Requirements
 
-- Mac with **Apple Silicon** (M1 / M2 / M3 / …)  
-- **macOS** recent enough for DriverKit audio (Ventura or newer recommended)  
-- **Xcode** and an **Apple Developer** team (paid account; DriverKit entitlements)  
+- Mac with **Apple Silicon** (M1 / M2 / M3 / …)
+- **macOS** recent enough for DriverKit audio (Ventura or newer recommended)
+- **Xcode** and an **Apple Developer** team (paid account; DriverKit entitlements)
 - A Roland **QUAD-CAPTURE (UA-55)** — USB id `0582:012F`
 
 ---
@@ -59,7 +61,7 @@ You don’t need to understand USB or DriverKit to use it—but if something fai
 
 Open `UA55Diagnostic.xcodeproj` in Xcode, select the **UA55DiagnosticApp** scheme, destination **My Mac**, then Build.
 
-Or from a terminal:
+Or from a terminal, at the repo root:
 
 ```bash
 xcodebuild -project UA55Diagnostic.xcodeproj \
@@ -72,19 +74,20 @@ xcodebuild -project UA55Diagnostic.xcodeproj \
 
 System extensions must live under `/Applications`:
 
-1. Copy `UA55DiagnosticApp.app` into **Applications**.  
-2. Plug in the QUAD-CAPTURE.  
-3. Open the app → **Deactivate** (if needed) → **Activate driver**.  
-4. Approve the extension when macOS asks (System Settings → Privacy & Security / Extensions).  
+1. Copy `UA55DiagnosticApp.app` into **Applications**.
+2. Plug in the QUAD-CAPTURE.
+3. Open the app → **Deactivate** (if an older extension is loaded) → **Activate driver**.
+4. Approve the extension when macOS asks (System Settings → Privacy & Security / Extensions).
 5. Unplug and reconnect the interface once.
 
 More detail (capabilities, provisioning, logs): **[docs/BUILD.md](docs/BUILD.md)**.
 
 ### 3. Check that it worked
 
-1. Open **Audio MIDI Setup** — you should see **QUAD-CAPTURE UA-55** with **4 out / 6 in** at **44.1 kHz**.  
-2. System Settings → **Sound** → choose it as output and play something.  
-3. Optional: record the inputs in QuickTime, GarageBand, or your DAW.
+1. Open **Audio MIDI Setup**. You should see **QUAD-CAPTURE UA-55**.
+2. At 44.1, 48, or 96 kHz the device is **4 out / 6 in**. At 192 kHz it is **2 out / 2 in**.
+3. System Settings → **Sound** → choose it as output and play something.
+4. Optional: record the inputs in QuickTime, GarageBand, or your DAW.
 
 Useful commands:
 
@@ -96,7 +99,22 @@ systemextensionsctl list
 log show --last 10m --style compact --predicate 'eventMessage CONTAINS "[UA55]"'
 ```
 
-You want a log line that mentions **`BUILD 34`** (or whatever build you just installed).
+You want a log line that mentions **`BUILD 55`** (or whatever build you just installed). On plug-in the driver prints `[UA55] ========== BUILD 55 loaded`.
+
+### 4. Control panel (optional)
+
+Audio does not need this app. It only mirrors the two preamp knobs and the AUTO SENS button.
+
+```bash
+xcodebuild -project QuadCapturePanelMac/QuadCapturePanel.xcodeproj \
+  -scheme QuadCapturePanel \
+  -destination 'platform=macOS,arch=arm64' \
+  build
+```
+
+Copy `QuadCapturePanel.app` to **Applications** and open it. The SENS readouts move when you turn the knobs on the box. AUTO SENS lights when the hardware button is on and goes gray when it is off.
+
+The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 55: deactivate, install the new app, activate, and reconnect the USB cable.
 
 ---
 
@@ -105,10 +123,10 @@ You want a log line that mentions **`BUILD 34`** (or whatever build you just ins
 | Piece | Role |
 | --- | --- |
 | `UA55DiagnosticApp` | Simple UI to activate / deactivate the system extension |
-| `UA55DiagnosticDriver` | The actual audio + USB driver (dext) |
-| `Shared/` | USB constants and helpers shared by the driver |
+| `UA55DiagnosticDriver` | The audio + USB driver (dext), including SENS and AUTO SENS logging |
+| `Shared/` | USB constants, sample-rate table, and helpers shared by the driver |
 | `docs/` | Build, entitlements, design notes |
-| `QuadCapturePanelMac/` | Optional on-screen panel (meters / UI mock) — **not** required for audio |
+| `QuadCapturePanelMac/` | On-screen panel. Optional for audio. Displays hardware SENS and AUTO SENS; does not command the box |
 
 ---
 
@@ -116,10 +134,10 @@ You want a log line that mentions **`BUILD 34`** (or whatever build you just ins
 
 | Symptom | What to try |
 | --- | --- |
-| Device never appears | Extension not approved, or not under `/Applications`. Check `systemextensionsctl list`. |
-| Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] BUILD …` in the log. |
-| Clicks / glitches on record | Prefer the known-good **build 34** settings; avoid experimental MIDI/control builds until they’re marked stable. |
-| Mac becomes unstable after a “control” experiment | Reinstall the **build 34** backup app and Activate again; reconnect the interface. |
+| Device never appears | Extension not approved, or the app is not under `/Applications`. Check `systemextensionsctl list`. |
+| Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] ========== BUILD 55 loaded`. |
+| Sample rate will not stick | Pick the rate in Audio MIDI Setup, then reconnect if the device disappears. 192 kHz is stereo only (2 out / 2 in). |
+| Panel knobs do not follow the hardware | The loaded dext is not logging SENS. Reactivate build 55 and reconnect. The panel does not send settings to the box. |
 
 Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
@@ -127,21 +145,21 @@ Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
 ## Stability note
 
-**Build 34** is the cut we treat as the daily driver: duplex audio at 44.1 kHz with comfortable buffering. Newer experiments (extra MIDI / software gain) are paused until they’re proven safe.
+**Build 55** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, and a read-only view of the preamp knobs and AUTO SENS.
 
-If you keep a local backup of that build, prefer it when you only need “sound in and out.”
+An older extension stays in force until you deactivate it and activate the copy in `/Applications`. The log line `BUILD 55` is the check that the new dext actually loaded.
 
 ---
 
 ## Contributing / mindset
 
-This is a reverse‑engineering and learning project around a discontinued USB audio product. PRs and reports are welcome, especially:
+This is a reverse-engineering and learning project around a discontinued USB audio product. PRs and reports are welcome, especially:
 
-- Clear “works / doesn’t work” notes (macOS version, build number, log snippets)  
-- Fixes that stay within DriverKit rules (no kernel extensions)  
+- Clear “works / doesn’t work” notes (macOS version, build number, sample rate, log snippets)
+- Fixes that stay within DriverKit rules (no kernel extensions)
 - Careful experiments that don’t brick the machine
 
-Please don’t expect feature parity with Roland’s old Control Panel overnight.
+The on-screen panel is a mirror of two hardware controls, not a replacement for Roland’s old Control Panel.
 
 ---
 
