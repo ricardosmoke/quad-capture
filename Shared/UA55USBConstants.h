@@ -10,7 +10,7 @@ static const uint16_t kUA55ProductID = 0x012F;
 
 // Deve coincidir com CURRENT_PROJECT_VERSION no Xcode (log ao plugar).
 #ifndef UA55_DRIVER_BUILD
-#define UA55_DRIVER_BUILD 55
+#define UA55_DRIVER_BUILD 58
 #endif
 static const uint32_t kUA55DriverBuild = UA55_DRIVER_BUILD;
 
@@ -119,11 +119,13 @@ static const uint32_t kUA55HalRingFrames = kUA55ZeroTimestampPeriod;
 // Anel S32 USB pode ser maior (vários períodos de folga).
 static const uint32_t kUA55BridgeFrames = 4096;
 static const uint32_t kUA55ZtsWarmupCompletions = 8;
-// Ler o bridge atrás da ponta que o HAL já escreveu (WriteEnd).
-// 128 ≈ 3 ms; 256 ≈ 6 ms; 512 ≈ 12 ms. Mais folga = menos ruído, mais latência.
+// Folga da leitura de playback, em frames, calibrada a 44.1 kHz (~12 ms).
+// Em 96/192 kHz o mesmo número de frames vale 3–6 ms, menos do que o anel
+// isoc em voo, e a leitura alcança o HAL: underrun e resync sem fim.
+// O stream escala estes valores pelo sample rate (ver PlaybackSlackFrames).
 static const uint32_t kUA55PlaybackReadSlackFrames = 512;
-// Só recentra se a leitura ficou muito atrás. 512 disparava em 44.1 kHz
-// (um período do HAL) e cada salto caía na ponta de escrita: silêncio.
+// Só recentra se a leitura ficou muito atrás (~46 ms em 44.1 kHz).
+// 512 disparava a cada período do HAL e o salto caía na ponta: silêncio.
 static const uint32_t kUA55PlaybackResyncThreshold = 2048;
 // Publicar ZTS de captura ATRÁS da ponta USB (captureWriteSample_).
 // Sem isto o HAL faz BeginRead na ponta → corrida com IsochIO → clicks na voz.

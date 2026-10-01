@@ -40,6 +40,7 @@ struct UA55AudioDevice_IVars {
     uint64_t ticksPerMs;
     uint32_t ringFrames;
     uint32_t currentRateInt;
+    uint32_t goalRateInt;
     double pendingRate;
     bool rateChangeInFlight;
     bool ioRunning;
@@ -51,6 +52,28 @@ namespace {
 // RingBufferFrameSize, StreamFormat). Usar 1 faz o Perform do HAL
 // reaplicar a taxa antiga e o CoreAudio religa o áudio antes da troca.
 static const uint64_t kUA55ConfigChangeSampleRate = 100;
+// Tempo com IO realmente a correr em cada degrau, antes do próximo.
+static const uint32_t kUA55RateHopSettleMs = 100;
+static const uint32_t kUA55RateHopWaitForIoMs = 200;
+
+const UA55RateConfig* AdjacentToward(uint32_t currentHz, uint32_t goalHz)
+{
+    int from = -1;
+    int to = -1;
+    for (uint32_t index = 0; index < kUA55RateCount; index++) {
+        if (kUA55Rates[index].rateInt == currentHz) {
+            from = (int)index;
+        }
+        if (kUA55Rates[index].rateInt == goalHz) {
+            to = (int)index;
+        }
+    }
+    if (from < 0 || to < 0 || from == to) {
+        return nullptr;
+    }
+    const int next = from + (to > from ? 1 : -1);
+    return &kUA55Rates[next];
+}
 
 IOUserAudioStreamBasicDescription MakeFloatFormat(uint32_t channels, double sampleRate)
 {
@@ -256,6 +279,7 @@ bool UA55AudioDevice::init(IOUserAudioDriver* in_driver,
     SetAvailableSampleRates(rates, kUA55RateCount);
     SetSampleRate(kUA55SampleRate);
     ivars->currentRateInt = kUA55SampleRateInt;
+    ivars->goalRateInt = kUA55SampleRateInt;
     ivars->pendingRate = kUA55SampleRate;
     SetTransportType(IOUserAudioTransportType::USB);
     SetCanBeDefaultInputDevice(true);
@@ -426,6 +450,7 @@ kern_return_t UA55AudioDevice::ConfigureHardware(uint64_t usbStreamAddr)
         const UA55RateConfig* hardware = UA55RateForHz((double)ivars->usbStream->CurrentRate());
         if (hardware != nullptr && hardware->rateInt != ivars->currentRateInt) {
             ivars->currentRateInt = hardware->rateInt;
+            ivars->goalRateInt = hardware->rateInt;
             ivars->pendingRate = hardware->rate;
             UpdateTimebase(ivars, hardware->rate);
             SetSampleRate(hardware->rate);
@@ -464,21 +489,19 @@ void UA55AudioDevice::TimerOccurred_Impl(OSAction* action, uint64_t time)
     ivars->ztsTimer->WakeAtTime(kIOTimerClockMachAbsoluteTime, wake, 0);
 }
 
-kern_return_t UA55AudioDevice::HandleChangeSampleRate(double in_sample_rate)
+void UA55AudioDevice::BeginAdjacentRateHop()
 {
-    const UA55RateConfig* mode = UA55RateForHz(in_sample_rate);
-    if (mode == nullptr || ivars == nullptr) {
-        return kIOReturnUnsupported;
+    if (ivars == nullptr || ivars->rateChangeInFlight) {
+        return;
     }
-    if (mode->rateInt == ivars->currentRateInt && !ivars->rateChangeInFlight) {
-        return kIOReturnSuccess;
+    const UA55RateConfig* hop = AdjacentToward(ivars->currentRateInt, ivars->goalRateInt);
+    if (hop == nullptr) {
+        return;
     }
-    ivars->pendingRate = mode->rate;
-    os_log(OS_LOG_DEFAULT, "[UA55] sample rate request %u Hz", mode->rateInt);
-    if (ivars->rateChangeInFlight) {
-        return kIOReturnSuccess;
-    }
+    ivars->pendingRate = hop->rate;
     ivars->rateChangeInFlight = true;
+    os_log(OS_LOG_DEFAULT, "[UA55] sample rate hop %u Hz toward %u",
+           hop->rateInt, ivars->goalRateInt);
     if (ivars->usbStream != nullptr &&
         ivars->usbStream->IsStreaming() &&
         ivars->rateQueue.get() != nullptr) {
@@ -492,29 +515,75 @@ kern_return_t UA55AudioDevice::HandleChangeSampleRate(double in_sample_rate)
                 device->ivars->rateChangeInFlight = false;
                 return;
             }
-            const UA55RateConfig* pending = UA55RateForHz(device->ivars->pendingRate);
-            const uint32_t currentHz = device->ivars->usbStream->CurrentRate();
-            const bool warm441 =
-                pending != nullptr &&
-                ((pending->rateInt == 44100 && (currentHz == 96000 || currentHz == 192000)) ||
-                 (currentHz == 44100 && pending->rateInt == 192000));
-            if (warm441 && !device->ivars->usbStream->Warm44100Via48000(pending->rateInt)) {
-                device->ivars->rateChangeInFlight = false;
-                return;
-            }
             const kern_return_t queued =
                 device->RequestDeviceConfigurationChange(kUA55ConfigChangeSampleRate, nullptr);
             if (queued != kIOReturnSuccess) {
                 device->ivars->rateChangeInFlight = false;
             }
         });
-        return kIOReturnSuccess;
+        return;
     }
     const kern_return_t result = RequestDeviceConfigurationChange(kUA55ConfigChangeSampleRate, nullptr);
     if (result != kIOReturnSuccess) {
         ivars->rateChangeInFlight = false;
     }
-    return result;
+}
+
+void UA55AudioDevice::ScheduleAdjacentRateHop()
+{
+    if (ivars == nullptr || ivars->goalRateInt == ivars->currentRateInt) {
+        return;
+    }
+    if (ivars->rateQueue.get() == nullptr) {
+        BeginAdjacentRateHop();
+        return;
+    }
+    UA55AudioDevice* device = this;
+    ivars->rateQueue->DispatchAsync(^{
+        if (device->ivars == nullptr || device->ivars->usbStream == nullptr) {
+            return;
+        }
+        // O HAL precisa de StartIO neste degrau. Sem isso o salto seguinte
+        // repete o problema de mudar o clock com o áudio ainda na taxa antiga.
+        const uint32_t slices = kUA55RateHopWaitForIoMs / 10;
+        for (uint32_t index = 0; index < slices; index++) {
+            if (device->ivars->usbStream->IsStreaming()) {
+                break;
+            }
+            IOSleep(10);
+        }
+        IOSleep(kUA55RateHopSettleMs);
+        if (device->ivars->rateChangeInFlight) {
+            return;
+        }
+        if (device->ivars->goalRateInt == device->ivars->currentRateInt) {
+            return;
+        }
+        os_log(OS_LOG_DEFAULT, "[UA55] sample rate settled %u Hz, next hop",
+               device->ivars->currentRateInt);
+        device->BeginAdjacentRateHop();
+    });
+}
+
+kern_return_t UA55AudioDevice::HandleChangeSampleRate(double in_sample_rate)
+{
+    const UA55RateConfig* mode = UA55RateForHz(in_sample_rate);
+    if (mode == nullptr || ivars == nullptr) {
+        return kIOReturnUnsupported;
+    }
+    // Eco do SetSampleRate do degrau que acabámos de publicar.
+    if (mode->rateInt == ivars->currentRateInt) {
+        return kIOReturnSuccess;
+    }
+    if (mode->rateInt != ivars->goalRateInt) {
+        ivars->goalRateInt = mode->rateInt;
+        os_log(OS_LOG_DEFAULT, "[UA55] sample rate request %u Hz", mode->rateInt);
+    }
+    if (ivars->rateChangeInFlight) {
+        return kIOReturnSuccess;
+    }
+    BeginAdjacentRateHop();
+    return kIOReturnSuccess;
 }
 
 kern_return_t UA55AudioDevice::PerformDeviceConfigurationChange(uint64_t in_change_action,
@@ -545,14 +614,8 @@ kern_return_t UA55AudioDevice::PerformDeviceConfigurationChange(uint64_t in_chan
                mode->rateInt, mode->outputChannels, mode->inputChannels);
 
         ivars->rateChangeInFlight = false;
-        const UA55RateConfig* latest = UA55RateForHz(ivars->pendingRate);
-        if (latest != nullptr && latest->rateInt != ivars->currentRateInt) {
-            ivars->rateChangeInFlight = true;
-            const kern_return_t queued =
-                RequestDeviceConfigurationChange(kUA55ConfigChangeSampleRate, nullptr);
-            if (queued != kIOReturnSuccess) {
-                ivars->rateChangeInFlight = false;
-            }
+        if (ivars->goalRateInt != ivars->currentRateInt) {
+            ScheduleAdjacentRateHop();
         }
     }
     return super::PerformDeviceConfigurationChange(in_change_action, in_change_info);
@@ -571,6 +634,13 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
             hopped = StartIO(in_flags);
         });
         return hopped;
+    }
+
+    // Durante a troca o HAL pede StartIO de novo. Arrancar aqui publica o
+    // ZTS na taxa antiga (o caso 96→44.1 e 192→44.1) e o playback não trava.
+    if (ivars->rateChangeInFlight) {
+        os_log(OS_LOG_DEFAULT, "[UA55] StartIO during rate change — deferred");
+        return kIOReturnSuccess;
     }
 
     __block kern_return_t error = kIOReturnSuccess;
@@ -632,12 +702,6 @@ kern_return_t UA55AudioDevice::StartIO(IOUserAudioStartStopFlags in_flags)
             ivars->sampleTime = 0;
             ivars->lastPublishedZts = 0;
             UpdateCurrentZeroTimestamp(0, mach_absolute_time());
-        }
-
-        if (ivars->rateChangeInFlight) {
-            ivars->ioRunning = true;
-            os_log(OS_LOG_DEFAULT, "[UA55] StartIO during rate change — USB stays idle");
-            return kIOReturnSuccess;
         }
 
         if (ivars->usbStream != nullptr) {

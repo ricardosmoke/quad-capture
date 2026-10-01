@@ -434,6 +434,16 @@ void UA55UsbStream::HalReadInput(float* inputRing,
     }
 }
 
+// Mantém a mesma folga em tempo (~12 ms / ~46 ms) em todas as taxas.
+// Os constantes são o valor que trava 44.1 kHz; em frames fixos, 192 kHz
+// recentra a cada poucos ms e o áudio não volta.
+static uint32_t ScaledFrom44100(uint32_t framesAt44100, uint32_t rateInt)
+{
+    const uint32_t rate = rateInt != 0 ? rateInt : 44100;
+    const uint32_t scaled = (uint32_t)(((uint64_t)framesAt44100 * rate) / 44100u);
+    return scaled < framesAt44100 ? framesAt44100 : scaled;
+}
+
 uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
 {
     IOAddressSegment frameRange = {};
@@ -451,20 +461,22 @@ uint32_t UA55UsbStream::FillPlaybackTransfer(IsochSlot* slot)
     const uint32_t bytesPerFrame = outCh * kUA55BytesPerSample;
 
     int64_t drift = 0;
+    const uint32_t slack = ScaledFrom44100(kUA55PlaybackReadSlackFrames, rate_.rateInt);
+    const uint32_t resyncAt = ScaledFrom44100(kUA55PlaybackResyncThreshold, rate_.rateInt);
     // Alinhar OUT à ponta do HAL (não ao capture): o WriteEnd é a fonte da verdade.
-    if (halWriteSample_ > kUA55PlaybackReadSlackFrames) {
-        const uint64_t target = halWriteSample_ - kUA55PlaybackReadSlackFrames;
+    if (halWriteSample_ > slack) {
+        const uint64_t target = halWriteSample_ - slack;
         drift = (int64_t)playbackReadSample_ - (int64_t)target;
         lastLoggedDrift_ = drift;
-        if (drift > (int64_t)kUA55PlaybackReadSlackFrames ||
-            drift < -(int64_t)kUA55PlaybackResyncThreshold) {
+        if (drift > (int64_t)slack ||
+            drift < -(int64_t)resyncAt) {
             playbackReadSample_ = target;
             playbackResyncs_++;
             drift = 0;
             lastLoggedDrift_ = 0;
         }
-    } else if (captureWriteSample_ > kUA55PlaybackReadSlackFrames) {
-        const uint64_t target = captureWriteSample_ - kUA55PlaybackReadSlackFrames;
+    } else if (captureWriteSample_ > slack) {
+        const uint64_t target = captureWriteSample_ - slack;
         drift = (int64_t)playbackReadSample_ - (int64_t)target;
         lastLoggedDrift_ = drift;
     }
@@ -635,10 +647,11 @@ void UA55UsbStream::SetTimestampTarget(volatile uint64_t* sampleTime, void* time
     sampleTime_ = sampleTime;
     timestampTarget_ = timestampTarget;
     // Re-sincroniza OUT à ponta do HAL (ou ao capture se ainda não houve WriteEnd).
-    if (halWriteSample_ > kUA55PlaybackReadSlackFrames) {
-        playbackReadSample_ = halWriteSample_ - kUA55PlaybackReadSlackFrames;
-    } else if (captureWriteSample_ > kUA55PlaybackReadSlackFrames) {
-        playbackReadSample_ = captureWriteSample_ - kUA55PlaybackReadSlackFrames;
+    const uint32_t slack = ScaledFrom44100(kUA55PlaybackReadSlackFrames, rate_.rateInt);
+    if (halWriteSample_ > slack) {
+        playbackReadSample_ = halWriteSample_ - slack;
+    } else if (captureWriteSample_ > slack) {
+        playbackReadSample_ = captureWriteSample_ - slack;
     }
     underruns_ = 0;
 }
@@ -831,22 +844,6 @@ kern_return_t UA55UsbStream::ApplySampleRate(uint32_t rateInt)
         return kIOReturnUnsupported;
     }
     gUA55DesiredRateHz = mode->rateInt;
-    // 96 ↔ 44.1 não é uma oitava. O clock passa por 48 kHz. Transmitir
-    // silêncio nessa passagem NÃO pode ser aqui: o Perform segura as
-    // completions e o isoc nunca drena.
-    const bool via48 =
-        ((rate_.rateInt == 96000 || rate_.rateInt == 192000) && mode->rateInt == 44100) ||
-        (rate_.rateInt == 44100 && (mode->rateInt == 96000 || mode->rateInt == 192000));
-    if (via48) {
-        const uint32_t finalRate = mode->rateInt;
-        os_log(OS_LOG_DEFAULT, "[UA55] sample rate via 48000 before %u", finalRate);
-        const kern_return_t step = ApplySampleRate(48000);
-        gUA55DesiredRateHz = finalRate;
-        if (step != kIOReturnSuccess) {
-            return step;
-        }
-        streamedSinceOpen_ = true;
-    }
     if (rate_.rateInt == mode->rateInt &&
         hardwareRate_ == mode->rateInt &&
         playbackPipe_ != nullptr &&

@@ -1,6 +1,7 @@
 import AudioToolbox
 import CoreAudio
 import Foundation
+import os
 import SwiftUI
 
 /// Motor Core Audio fora do MainActor (callback de entrada é tempo-real).
@@ -9,6 +10,10 @@ final class LevelCaptureEngine: @unchecked Sendable {
 
     private(set) var audioUnit: AudioUnit?
     private var callbackContext: CallbackContext?
+    /// Contextos de callbacks já parados. O HAL pode chamar o render uma última
+    /// vez depois do Stop, durante a troca de sample rate. Soltar o objeto aí
+    /// derruba o processo (SIGSEGV), e isso não é uma exceção que dê para capturar.
+    private var retiredContexts: [CallbackContext] = []
     private let lock = NSLock()
     private var pending = [Float](repeating: 0, count: maxChannels)
     private(set) var activeChannels = 2
@@ -30,6 +35,11 @@ final class LevelCaptureEngine: @unchecked Sendable {
     }
 
     func stop() {
+        if let context = callbackContext {
+            context.deactivate()
+            retiredContexts.append(context)
+        }
+        callbackContext = nil
         if let unit = audioUnit {
             PanelLog.measure("AudioOutputUnitStop") {
                 AudioOutputUnitStop(unit)
@@ -38,7 +48,6 @@ final class LevelCaptureEngine: @unchecked Sendable {
             }
         }
         audioUnit = nil
-        callbackContext = nil
     }
 
     func start(deviceID: AudioDeviceID) throws {
@@ -141,9 +150,19 @@ final class LevelCaptureEngine: @unchecked Sendable {
     final class CallbackContext {
         let engine: LevelCaptureEngine
         let channelCount: Int
+        private let active = OSAllocatedUnfairLock(initialState: true)
+
         init(engine: LevelCaptureEngine, channelCount: Int) {
             self.engine = engine
             self.channelCount = channelCount
+        }
+
+        func deactivate() {
+            active.withLock { $0 = false }
+        }
+
+        var isActive: Bool {
+            active.withLock { $0 }
         }
     }
 }
@@ -208,7 +227,9 @@ final class InputLevelMonitor: ObservableObject {
         openInFlight = true
         let engine = engine
         PanelWork.queue.async {
-            let result = Self.switchRateOffMain(engine, hz: hz)
+            let result = Self.protecting("sample rate") {
+                Self.switchRateOffMain(engine, hz: hz)
+            }
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.openInFlight = false
@@ -241,7 +262,9 @@ final class InputLevelMonitor: ObservableObject {
         openInFlight = true
         let engine = engine
         PanelWork.queue.async {
-            let result = Self.openOffMain(engine, reason: reason)
+            let result = Self.protecting(reason) {
+                Self.openOffMain(engine, reason: reason)
+            }
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.openInFlight = false
@@ -269,7 +292,9 @@ final class InputLevelMonitor: ObservableObject {
             let changed = known > 0 && UA55Device.bucket(hz) != UA55Device.bucket(known)
             var reopened: OpenResult?
             if changed {
-                reopened = Self.openOffMain(engine, reason: "rate-watch")
+                reopened = Self.protecting("rate-watch") {
+                    Self.openOffMain(engine, reason: "rate-watch")
+                }
             }
             Task { @MainActor [weak self] in
                 guard let self, self.running, !self.openInFlight else { return }
@@ -286,6 +311,20 @@ final class InputLevelMonitor: ObservableObject {
         var connected: Bool
         var status: String
         var sampleRateHz: Double
+    }
+
+    /// Erros Swift ficam no log e viram um estado de falha. O processo continua.
+    /// Uma falha de memória no callback de áudio não passa por aqui.
+    private nonisolated static func protecting(_ label: String, _ body: () throws -> OpenResult) -> OpenResult {
+        do {
+            return try body()
+        } catch {
+            PanelLog.write("\(label) failed \(error.localizedDescription)")
+            return OpenResult(
+                connected: false,
+                status: "Falha: \(error.localizedDescription)",
+                sampleRateHz: 0)
+        }
     }
 
     private nonisolated static func switchRateOffMain(_ engine: LevelCaptureEngine, hz: Double) -> OpenResult {
@@ -477,6 +516,7 @@ private func inputRenderCallback(
     let context = Unmanaged<LevelCaptureEngine.CallbackContext>
         .fromOpaque(inRefCon)
         .takeUnretainedValue()
+    guard context.isActive else { return noErr }
     guard let unit = context.engine.audioUnit else { return noErr }
 
     let channels = context.channelCount
