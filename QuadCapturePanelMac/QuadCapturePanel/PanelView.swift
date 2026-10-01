@@ -54,7 +54,7 @@ struct PanelView: View {
     }
 }
 
-// MARK: - Layout / hit targets (coordenadas do design 930×592)
+// MARK: - Layout / hit targets (coordenadas do design 866×592)
 
 struct KnobSpec {
     let id: KnobID
@@ -85,7 +85,7 @@ struct PanelLayout {
             height: design.height * scale)
     }
 
-    /// Caixa SAMPLE RATE no rodapé (design 930×592).
+    /// Caixa SAMPLE RATE no rodapé (design 866×592).
     static let sampleRateHit = CGRect(x: 150, y: 563, width: 110, height: 24)
 
     /// Posições dos knobs alinhadas ao Canvas.
@@ -94,23 +94,23 @@ struct PanelLayout {
         KnobSpec(id: .sens1, cx: 8 + 72, cy: 38 + 40 + 124, radius: 22, interactive: false),
         KnobSpec(id: .sens2, cx: 8 + 72, cy: 38 + 318 + 124, radius: 22, interactive: false),
         // COMP 1
-        KnobSpec(id: .comp1Gate, cx: 252 + 32 + 0 * 62, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Threshold, cx: 252 + 32 + 1 * 62, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Ratio, cx: 252 + 32 + 2 * 62, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Attack, cx: 252 + 32 + 3 * 62, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Release, cx: 252 + 32 + 4 * 62, cy: 78 + 164, radius: 18),
-        KnobSpec(id: .comp1Gain, cx: 252 + 32 + 5 * 62, cy: 78 + 164, radius: 18),
+        KnobSpec(id: .comp1Gate, cx: 220 + 58 + 0 * 62, cy: 78 + 180, radius: 18),
+        KnobSpec(id: .comp1Threshold, cx: 220 + 58 + 1 * 62, cy: 78 + 180, radius: 18),
+        KnobSpec(id: .comp1Ratio, cx: 220 + 58 + 2 * 62, cy: 78 + 180, radius: 18),
+        KnobSpec(id: .comp1Attack, cx: 220 + 58 + 3 * 62, cy: 78 + 180, radius: 18),
+        KnobSpec(id: .comp1Release, cx: 220 + 58 + 4 * 62, cy: 78 + 180, radius: 18),
+        KnobSpec(id: .comp1Gain, cx: 220 + 58 + 5 * 62, cy: 78 + 180, radius: 18),
         // COMP 2
-        KnobSpec(id: .comp2Gate, cx: 252 + 32 + 0 * 62, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Threshold, cx: 252 + 32 + 1 * 62, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Ratio, cx: 252 + 32 + 2 * 62, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Attack, cx: 252 + 32 + 3 * 62, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Release, cx: 252 + 32 + 4 * 62, cy: 324 + 164, radius: 18),
-        KnobSpec(id: .comp2Gain, cx: 252 + 32 + 5 * 62, cy: 324 + 164, radius: 18),
+        KnobSpec(id: .comp2Gate, cx: 220 + 58 + 0 * 62, cy: 324 + 180, radius: 18),
+        KnobSpec(id: .comp2Threshold, cx: 220 + 58 + 1 * 62, cy: 324 + 180, radius: 18),
+        KnobSpec(id: .comp2Ratio, cx: 220 + 58 + 2 * 62, cy: 324 + 180, radius: 18),
+        KnobSpec(id: .comp2Attack, cx: 220 + 58 + 3 * 62, cy: 324 + 180, radius: 18),
+        KnobSpec(id: .comp2Release, cx: 220 + 58 + 4 * 62, cy: 324 + 180, radius: 18),
+        KnobSpec(id: .comp2Gain, cx: 220 + 58 + 5 * 62, cy: 324 + 180, radius: 18),
         // MIXER
-        KnobSpec(id: .mixOutput, cx: 694 + 228 / 2, cy: 38 + 268, radius: 22),
-        KnobSpec(id: .mixInput1, cx: 694 + 228 / 2, cy: 38 + 348, radius: 22),
-        KnobSpec(id: .mixInput2, cx: 694 + 228 / 2, cy: 38 + 430, radius: 22),
+        KnobSpec(id: .mixOutput, cx: 662 + 196 / 2, cy: 38 + 268, radius: 22),
+        KnobSpec(id: .mixInput1, cx: 662 + 196 / 2, cy: 38 + 348, radius: 22),
+        KnobSpec(id: .mixInput2, cx: 662 + 196 / 2, cy: 38 + 430, radius: 22),
     ]
 }
 
@@ -219,7 +219,7 @@ extension PanelModel {
 // MARK: - Canvas
 
 enum PanelCanvas {
-    static let designWidth: CGFloat = 930
+    static let designWidth: CGFloat = 866
     static let designHeight: CGFloat = 592
 
     static let metal = Color(hex: 0x3A3A3A)
@@ -242,23 +242,23 @@ enum PanelCanvas {
         context.scaleBy(x: scale, y: scale)
 
         header(&context)
-        preamp(&context, 8, 38, 228, 520, state: state)
-        compressor(&context, 242, 38, 446, 520, state: state)
-        mixer(&context, 694, 38, 228, 520, state: state)
+        preamp(&context, 8, 38, 196, 520, state: state)
+        compressor(&context, 210, 38, 446, 520, state: state)
+        mixer(&context, 662, 38, 196, 520, state: state)
         footer(&context, state: state)
     }
 
     private static func header(_ context: inout GraphicsContext) {
         fill(&context, rect(0, 0, designWidth, 36), Color(hex: 0x323232))
         var plate = Path()
-        plate.move(to: point(592, 2))
-        plate.addLine(to: point(636, 34))
-        plate.addLine(to: point(922, 34))
-        plate.addLine(to: point(922, 2))
+        plate.move(to: point(528, 2))
+        plate.addLine(to: point(572, 34))
+        plate.addLine(to: point(858, 34))
+        plate.addLine(to: point(858, 2))
         plate.closeSubpath()
         context.fill(plate, with: .color(Color(hex: 0x4E4E4E)))
         context.stroke(plate, with: .color(Color(hex: 0x8A8A8A)), lineWidth: 1)
-        text(&context, "QUAD-CAPTURE", 650, 2, 260, 32, 18, ink, bold: true)
+        text(&context, "QUAD-CAPTURE", 586, 2, 260, 32, 18, ink, bold: true)
     }
 
     private static func preamp(
@@ -273,13 +273,13 @@ enum PanelCanvas {
         channel(
             &context, x + 8, channel1Y, "1", state.sens1Text, PanelModel.knobAngle(state.sens1),
             level: state.pre1, peak: state.pre1Peak)
-        let buttonW: CGFloat = 96
+        let buttonW: CGFloat = 72
         let buttonH: CGFloat = 40
         let gapTop = channel1Y + 182
         let gapBottom = channel2Y + 4
         button(
             &context,
-            x + (w - buttonW) / 2,
+            x + 44,
             gapTop + (gapBottom - gapTop - buttonH) / 2,
             buttonW, buttonH,
             "AUTO SENS", gray: state.autoSensText != "on")
@@ -311,7 +311,7 @@ enum PanelCanvas {
         frame(&context, x, y, w, h)
         title(&context, "COMPRESSOR", x, y + 6, w)
         compStrip(&context, x + 10, y + 40, strip: state.comp1, gr: state.gr1, out: state.compOut1, outPeak: state.compOut1Peak)
-        button(&context, x + w / 2 - 36, y + 248, 72, 28, "LINK", gray: false)
+        button(&context, x + 10, y + 248, 70, 32, "LINK", gray: false)
         compStrip(&context, x + 10, y + 286, strip: state.comp2, gr: state.gr2, out: state.compOut2, outPeak: state.compOut2Peak)
     }
 
@@ -332,9 +332,9 @@ enum PanelCanvas {
         let labels = ["GATE", "THRESHOLD", "RATIO", "ATTACK", "RELEASE", "GAIN"]
         let values = [strip.gate, strip.threshold, strip.ratio, strip.attack, strip.release, strip.gain]
         for index in labels.indices {
-            let cx = x + 32 + CGFloat(index) * 62
-            text(&context, labels[index], cx - 30, y + 122, 60, 14, 9, label, bold: false)
-            knob(&context, cx, y + 164, 18, PanelModel.knobAngle(values[index]))
+            let cx = x + 58 + CGFloat(index) * 62
+            text(&context, labels[index], cx - 30, y + 138, 60, 14, 9, label, bold: false)
+            knob(&context, cx, y + 180, 18, PanelModel.knobAngle(values[index]))
         }
     }
 
@@ -374,11 +374,11 @@ enum PanelCanvas {
         text(&context, "INTERNAL", 360, footerY, 120, 34, 14, clock, bold: true, left: true)
 
         let live = state.connected
-        fill(&context, circle(830, footerY + 17, 5), live ? lcdGreen : Color(hex: 0xFF3A32))
+        fill(&context, circle(766, footerY + 17, 5), live ? lcdGreen : Color(hex: 0xFF3A32))
         text(
             &context,
             live ? "IN LIVE" : "OFFLINE",
-            840, footerY, 70, 34, 11, live ? lcdGreen : Color(hex: 0xFF8A80),
+            776, footerY, 70, 34, 11, live ? lcdGreen : Color(hex: 0xFF8A80),
             bold: true, left: true)
     }
 

@@ -21,16 +21,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
 
         let root = PanelView()
-            .frame(minWidth: 900, minHeight: 520)
+            .frame(minWidth: 820, minHeight: 520)
 
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 930, height: 592),
+            contentRect: NSRect(x: 0, y: 0, width: 866, height: 592),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false)
         window.contentViewController = hosting
-        window.setContentSize(NSSize(width: 930, height: 592))
+        window.setContentSize(NSSize(width: 866, height: 592))
         window.title = "QUAD-CAPTURE Painel de controle"
         window.isReleasedWhenClosed = false
         // Sem autosave — evita "Unable to find className=(null)" na restauro.
