@@ -40,6 +40,7 @@ final class PanelModel: ObservableObject {
         var compOut2Peak: CGFloat = 0
         var mixerOut: CGFloat = 0
         var mixerOutPeak: CGFloat = 0
+        var sampleRateText: String = "—"
     }
 
     @Published var sens1: Double = 0
@@ -85,7 +86,12 @@ final class PanelModel: ObservableObject {
         s.compOut2Peak = compOutPeak(comp2, channel: 1)
         s.mixerOut = mixerOutputLevel
         s.mixerOutPeak = mixerOutputPeak
+        s.sampleRateText = UA55Device.label(for: levels.sampleRateHz)
         return s
+    }
+
+    func setSampleRate(_ hz: Double) {
+        monitor.setSampleRate(hz)
     }
 
     func start() {

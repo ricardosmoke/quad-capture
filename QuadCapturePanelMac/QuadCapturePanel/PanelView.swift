@@ -2,11 +2,13 @@ import SwiftUI
 
 struct PanelView: View {
     @StateObject private var model = PanelModel()
+    @State private var rateMenuOpen = false
 
     var body: some View {
         let state = model.drawState
         GeometryReader { geo in
             let layout = PanelLayout(size: geo.size)
+            let rateFrame = layout.viewRect(for: PanelLayout.sampleRateHit)
             ZStack(alignment: .topLeading) {
                 Canvas { context, size in
                     var ctx = context
@@ -18,6 +20,24 @@ struct PanelView: View {
                     KnobHandle(
                         value: model.binding(for: knob.id),
                         frame: layout.viewRect(for: knob.hit))
+                }
+
+                if rateMenuOpen {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .onTapGesture { rateMenuOpen = false }
+                    SampleRateMenu(
+                        anchor: rateFrame,
+                        currentHz: model.levels.sampleRateHz
+                    ) { hz in
+                        rateMenuOpen = false
+                        model.setSampleRate(hz)
+                    }
+                }
+
+                SampleRateButton(frame: rateFrame) {
+                    rateMenuOpen.toggle()
                 }
             }
         }
@@ -64,6 +84,9 @@ struct PanelLayout {
             width: design.width * scale,
             height: design.height * scale)
     }
+
+    /// Caixa SAMPLE RATE no rodapé (design 930×592).
+    static let sampleRateHit = CGRect(x: 150, y: 563, width: 110, height: 24)
 
     /// Posições dos knobs alinhadas ao Canvas.
     static let knobs: [KnobSpec] = [
@@ -118,6 +141,54 @@ struct KnobHandle: View {
                     }
             )
             .help("Arraste para ajustar")
+    }
+}
+
+struct SampleRateButton: View {
+    let frame: CGRect
+    let action: () -> Void
+
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .frame(width: frame.width, height: frame.height)
+            .position(x: frame.midX, y: frame.midY)
+            .onTapGesture(perform: action)
+            .help("Escolher sample rate")
+    }
+}
+
+struct SampleRateMenu: View {
+    let anchor: CGRect
+    let currentHz: Double
+    let onSelect: (Double) -> Void
+
+    var body: some View {
+        let rowH = anchor.height
+        let menuH = rowH * CGFloat(UA55Device.rates.count)
+        let font = max(11, 12 * rowH / 24)
+        VStack(spacing: 0) {
+            ForEach(UA55Device.rates, id: \.self) { hz in
+                let selected = currentHz > 0 && UA55Device.bucket(currentHz) == hz
+                Button {
+                    onSelect(hz)
+                } label: {
+                    Text(UA55Device.label(for: hz))
+                        .font(.system(size: font, weight: .semibold))
+                        .foregroundStyle(selected ? PanelCanvas.clock : PanelCanvas.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .frame(height: rowH)
+                        .background(selected ? Color(hex: 0x2A2A2A) : Color(hex: 0x111111))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(width: anchor.width, height: menuH)
+        .overlay(
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(Color(hex: 0x666666), lineWidth: 1))
+        .position(x: anchor.midX, y: anchor.minY - 4 - menuH / 2)
     }
 }
 
@@ -255,7 +326,7 @@ enum PanelCanvas {
         button(&context, x, y + 18, 70, 32, "BYPASS", gray: strip.bypass)
         text(&context, "GR", x + 78, y, 36, 14, 10, label, bold: true)
         meter(&context, x + 84, y + 16, 100, gr, peak: gr, showClip: false)
-        graph(&context, x + 136, y + 8, 220, 108, strip: strip)
+        graph(&context, x + 196, y + 8, 108, 108, strip: strip)
         meter(&context, x + 368, y + 8, 116, out, peak: outPeak, showClip: true)
 
         let labels = ["GATE", "THRESHOLD", "RATIO", "ATTACK", "RELEASE", "GAIN"]
@@ -290,7 +361,7 @@ enum PanelCanvas {
         text(&context, "SAMPLE RATE", 16, footerY, 130, 34, 13, label, bold: true, left: true)
         fill(&context, rect(150, footerY + 5, 110, 24, radius: 3), Color(hex: 0x111111))
         strokeRect(&context, 150, footerY + 5, 110, 24, 3, Color(hex: 0x666666), 1)
-        text(&context, "44.1 kHz", 154, footerY + 5, 80, 24, 12, ink, bold: true, left: true)
+        text(&context, state.sampleRateText, 154, footerY + 5, 80, 24, 12, ink, bold: true, left: true)
 
         var arrow = Path()
         arrow.move(to: point(236, footerY + 14))

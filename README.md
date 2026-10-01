@@ -18,7 +18,7 @@ Roland’s original Mac driver is old and no longer a good fit for modern macOS.
 | **192 kHz** | 2 outputs, 2 inputs (the interface only offers that rate in stereo) |
 | **Output volume** | Main, left, and right controls in macOS |
 | **Where it shows up** | Audio MIDI Setup, System Settings → Sound, GarageBand, Logic, etc. |
-| **On-screen panel** | Mirrors the hardware SENS knobs (0–54 dB) and the AUTO SENS button |
+| **On-screen panel** | Mirrors the hardware SENS knobs (0–54 dB) and AUTO SENS, and switches sample rate |
 
 In plain terms: after you install the driver, the QUAD-CAPTURE should behave like a normal Mac audio device. You can listen through it, record into it, and change the sample rate from Audio MIDI Setup.
 
@@ -27,7 +27,7 @@ In plain terms: after you install the driver, the QUAD-CAPTURE should behave lik
 ## What it does *not* do (yet)
 
 - **No full Roland Control Panel.** The companion app only *displays* what the box already does. It does not change preamp gain, compressor, mixer, or any other setting on the hardware. Nothing is sent to the interface.
-- **On-screen compressor and mixer knobs are local.** They do not follow or drive the box. The sample-rate line on the panel is a label, not the live clock.
+- **On-screen compressor and mixer knobs are local.** They do not follow or drive the box. Sample rate is the exception: the footer control asks Core Audio to change the device clock, the same way Audio MIDI Setup does.
 - **Not signed for mass distribution.** You need an Apple Developer account and must approve a system extension on your Mac.
 - **Apple Silicon only.** Not aimed at Intel Macs.
 
@@ -103,7 +103,7 @@ You want a log line that mentions **`BUILD 55`** (or whatever build you just ins
 
 ### 4. Control panel (optional)
 
-Audio does not need this app. It only mirrors the two preamp knobs and the AUTO SENS button.
+Audio does not need this app. It mirrors the two preamp knobs and the AUTO SENS button. The **SAMPLE RATE** box opens a list — 44.1, 48, 96, or 192 kHz — and the choice goes through Core Audio. The driver performs the USB clock change. At 192 kHz the device becomes 2 out / 2 in.
 
 ```bash
 xcodebuild -project QuadCapturePanelMac/QuadCapturePanel.xcodeproj \

@@ -166,6 +166,7 @@ final class InputLevelMonitor: ObservableObject {
         var peaks: [CGFloat] = Array(repeating: 0, count: 6)
         var connected: Bool = false
         var status: String = "Procurando QUAD-CAPTURE…"
+        var sampleRateHz: Double = 0
 
         var channel1: CGFloat { levels[0] }
         var channel2: CGFloat { levels[1] }
@@ -190,7 +191,30 @@ final class InputLevelMonitor: ObservableObject {
             Task { @MainActor in self?.tick() }
         }
         scanTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.ensureRunning() }
+            Task { @MainActor in
+                self?.ensureRunning()
+                self?.refreshSampleRate()
+            }
+        }
+    }
+
+    /// Para a captura, pede a taxa escolhida ao Core Audio e reabre os meters.
+    /// O dext faz a troca USB quando o HAL chama a mudança de sample rate.
+    func setSampleRate(_ hz: Double) {
+        guard running, !openInFlight else { return }
+        if snapshot.sampleRateHz > 0 && UA55Device.bucket(snapshot.sampleRateHz) == UA55Device.bucket(hz) {
+            return
+        }
+        openInFlight = true
+        let engine = engine
+        PanelWork.queue.async {
+            let result = Self.switchRateOffMain(engine, hz: hz)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.openInFlight = false
+                guard self.running else { return }
+                self.apply(result)
+            }
         }
     }
 
@@ -222,8 +246,38 @@ final class InputLevelMonitor: ObservableObject {
                 guard let self else { return }
                 self.openInFlight = false
                 guard self.running else { return }
-                self.snapshot.connected = result.connected
-                self.snapshot.status = result.status
+                self.apply(result)
+            }
+        }
+    }
+
+    private func apply(_ result: OpenResult) {
+        snapshot.connected = result.connected
+        snapshot.status = result.status
+        snapshot.sampleRateHz = result.sampleRateHz
+    }
+
+    /// Acompanha uma troca feita fora do painel (Audio MIDI Setup) e reabre
+    /// a captura quando o número de canais muda, como em 192 kHz.
+    private func refreshSampleRate() {
+        guard running, !openInFlight else { return }
+        let known = snapshot.sampleRateHz
+        let engine = engine
+        PanelWork.queue.async {
+            guard let id = UA55Device.find() else { return }
+            let hz = UA55Device.nominalRate(id) ?? 0
+            let changed = known > 0 && UA55Device.bucket(hz) != UA55Device.bucket(known)
+            var reopened: OpenResult?
+            if changed {
+                reopened = Self.openOffMain(engine, reason: "rate-watch")
+            }
+            Task { @MainActor [weak self] in
+                guard let self, self.running, !self.openInFlight else { return }
+                if let reopened {
+                    self.apply(reopened)
+                } else if hz > 0 {
+                    self.snapshot.sampleRateHz = hz
+                }
             }
         }
     }
@@ -231,23 +285,46 @@ final class InputLevelMonitor: ObservableObject {
     private struct OpenResult: Sendable {
         var connected: Bool
         var status: String
+        var sampleRateHz: Double
+    }
+
+    private nonisolated static func switchRateOffMain(_ engine: LevelCaptureEngine, hz: Double) -> OpenResult {
+        PanelLog.measure("engine.stop [rate]") { engine.stop() }
+        guard let id = UA55Device.find() else {
+            return OpenResult(connected: false, status: "QUAD-CAPTURE não encontrada", sampleRateHz: 0)
+        }
+        let current = UA55Device.nominalRate(id) ?? 0
+        let target = UA55Device.bucket(hz)
+        let status = PanelLog.measure("set sample rate \(Int(target))") {
+            UA55Device.setNominalRate(id, hz: target)
+        }
+        PanelLog.write("sample rate \(Int(current)) -> \(Int(target)) status \(status)")
+        var opened = openOffMain(engine, reason: "rate")
+        if status != noErr {
+            opened.status = "Falha ao trocar taxa (\(status))"
+        }
+        return opened
     }
 
     private nonisolated static func openOffMain(_ engine: LevelCaptureEngine, reason: String) -> OpenResult {
         PanelLog.measure("engine.stop [\(reason)]") { engine.stop() }
         guard let id = PanelLog.measure("find device [\(reason)]", { UA55Device.find() }) else {
-            return OpenResult(connected: false, status: "QUAD-CAPTURE não encontrada")
+            return OpenResult(connected: false, status: "QUAD-CAPTURE não encontrada", sampleRateHz: 0)
         }
+        let hz = UA55Device.nominalRate(id) ?? 0
         do {
             try PanelLog.measure("engine.start id=\(id) [\(reason)]") {
                 try engine.start(deviceID: id)
             }
             let name = UA55Device.name(id) ?? "UA-55"
-            PanelLog.write("input open ok \(name)")
-            return OpenResult(connected: true, status: "Entrada ao vivo · \(name)")
+            PanelLog.write("input open ok \(name) \(Int(hz)) Hz")
+            return OpenResult(connected: true, status: "Entrada ao vivo · \(name)", sampleRateHz: hz)
         } catch {
             PanelLog.write("input open failed \(error.localizedDescription)")
-            return OpenResult(connected: false, status: "Falha ao abrir entrada: \(error.localizedDescription)")
+            return OpenResult(
+                connected: false,
+                status: "Falha ao abrir entrada: \(error.localizedDescription)",
+                sampleRateHz: hz)
         }
     }
 
@@ -344,6 +421,48 @@ enum UA55Device {
         }
         let list = raw.assumingMemoryBound(to: AudioBufferList.self)
         return UnsafeMutableAudioBufferListPointer(list).reduce(0) { $0 + Int($1.mNumberChannels) }
+    }
+
+    static let rates: [Double] = [44100, 48000, 96000, 192000]
+
+    static func bucket(_ hz: Double) -> Double {
+        rates.min(by: { abs($0 - hz) < abs($1 - hz) }) ?? rates[0]
+    }
+
+    static func label(for hz: Double) -> String {
+        guard hz > 0 else { return "—" }
+        switch bucket(hz) {
+        case 44100: return "44.1 kHz"
+        case 48000: return "48 kHz"
+        case 96000: return "96 kHz"
+        case 192000: return "192 kHz"
+        default: return "—"
+        }
+    }
+
+    static func nominalRate(_ device: AudioDeviceID) -> Double? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var rate: Float64 = 0
+        var size = UInt32(MemoryLayout<Float64>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &rate) == noErr else {
+            return nil
+        }
+        return rate
+    }
+
+    /// Mesma propriedade que o Audio MIDI Setup escreve. O dext recebe
+    /// HandleChangeSampleRate e faz a troca no USB.
+    static func setNominalRate(_ device: AudioDeviceID, hz: Double) -> OSStatus {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var rate = Float64(hz)
+        let size = UInt32(MemoryLayout<Float64>.size)
+        return AudioObjectSetPropertyData(device, &address, 0, nil, size, &rate)
     }
 }
 
