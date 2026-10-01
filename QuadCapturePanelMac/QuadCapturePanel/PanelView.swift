@@ -326,7 +326,7 @@ enum PanelCanvas {
         button(&context, x, y + 18, 70, 32, "BYPASS", gray: strip.bypass)
         text(&context, "GR", x + 78, y, 36, 14, 10, label, bold: true)
         meter(&context, x + 84, y + 16, 100, gr, peak: gr, showClip: false)
-        graph(&context, x + 196, y + 8, 108, 108, strip: strip)
+        graph(&context, x + 186, y + 8, 104, 104)
         meter(&context, x + 368, y + 8, 116, out, peak: outPeak, showClip: true)
 
         let labels = ["GATE", "THRESHOLD", "RATIO", "ATTACK", "RELEASE", "GAIN"]
@@ -454,33 +454,42 @@ enum PanelCanvas {
         }
     }
 
+    /// Visor do compressor. O quadrado é só a grade; a escala -60…0 fica
+    /// fora dele, embaixo e à direita, como no painel da Roland.
     private static func graph(
         _ context: inout GraphicsContext,
-        _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
-        strip: PanelModel.CompStrip
+        _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat
     ) {
-        fill(&context, Path(CGRect(x: x, y: y, width: w, height: h)), Color(hex: 0xC45A18))
-        for index in 1..<8 {
-            let gx = x + CGFloat(index) * w / 8
-            strokeLine(&context, gx, y, gx, y + h, Color(hex: 0xE8A060), 1)
-        }
-        for index in 1..<5 {
-            let gy = y + CGFloat(index) * h / 5
-            strokeLine(&context, x, gy, x + w, gy, Color(hex: 0xE8A060), 1)
+        let plot = min(w, h)
+        let marks = ["-60", "-48", "-36", "-24", "-12", "0"]
+        let steps = CGFloat(marks.count - 1)
+
+        fill(&context, Path(CGRect(x: x, y: y, width: plot, height: plot)), Color(hex: 0xE39B45))
+
+        var lower = Path()
+        lower.move(to: point(x, y + plot))
+        lower.addLine(to: point(x + plot, y))
+        lower.addLine(to: point(x + plot, y + plot))
+        lower.closeSubpath()
+        context.fill(lower, with: .color(Color(hex: 0xC4621E)))
+
+        let grid = Color(hex: 0x8A3A12)
+        for index in marks.indices {
+            let t = CGFloat(index) / steps
+            let gx = x + t * plot
+            let gy = y + plot - t * plot
+            strokeLine(&context, gx, y, gx, y + plot, grid, 1)
+            strokeLine(&context, x, gy, x + plot, gy, grid, 1)
+            text(&context, marks[index], gx - 13, y + plot + 2, 26, 12, 8, label, bold: false)
+            text(
+                &context, marks[index], x + plot + 4, gy - 6, 24, 12, 8, label,
+                bold: false, left: true)
         }
 
-        // Curva reage a threshold/ratio.
-        let thrX = x + 8 + CGFloat(strip.threshold) * (w - 24)
-        let kneeY = y + h - 10 - CGFloat(strip.ratio) * (h * 0.55)
         var curve = Path()
-        curve.move(to: point(x + 8, y + h - 10))
-        curve.addLine(to: point(thrX, y + h - 10 - CGFloat(strip.threshold) * (h - 24)))
-        curve.addQuadCurve(
-            to: point(x + w - 10, max(y + 10, kneeY)),
-            control: point(thrX + (w - thrX) * 0.35, kneeY + 10))
-        context.stroke(curve, with: .color(Color(hex: 0xFFF4D8)), lineWidth: 2)
-        text(&context, "0", x + w - 16, y + 2, 14, 12, 9, ink, bold: false)
-        text(&context, "-60", x + 2, y + h - 14, 28, 12, 8, ink, bold: false, left: true)
+        curve.move(to: point(x, y + plot))
+        curve.addLine(to: point(x + plot, y))
+        context.stroke(curve, with: .color(Color(hex: 0xFFF8EC)), lineWidth: 1.5)
     }
 
     private static func lcd(_ context: inout GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ value: String) {
