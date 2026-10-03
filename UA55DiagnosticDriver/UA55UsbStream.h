@@ -49,8 +49,10 @@ public:
     void SetOutputPairMuted(uint32_t pair, bool muted);
     void SetOutputMasterMuted(bool muted);
 
-    // Chamado no fio USB quando chega DT1 de SENS. Sem MIDI OUT.
+    // Chamado no fio USB quando chega DT1 de SENS.
     void SetSensListener(void* context, void (*listener)(void* context, uint8_t channel, uint8_t db));
+    // Pacote USB MIDI de 20 bytes (cabo 1, LO-CUT). Bulk OUT 0x06.
+    kern_return_t SendMidi(const uint8_t* bytes, uint32_t length);
     // 255 = esse canal ainda não chegou. Leitura lock-free para o user client.
     void CopySens(uint8_t* left, uint8_t* right) const;
 
@@ -103,6 +105,7 @@ private:
     IOUSBHostPipe* playbackPipe_ = nullptr;
     IOUSBHostPipe* capturePipe_ = nullptr;
     IOUSBHostPipe* midiInPipe_ = nullptr;
+    IOUSBHostPipe* midiOutPipe_ = nullptr;
     IsochSlot captureSlots_[kUA55IsochRingDepth];
     IsochSlot playbackSlots_[kUA55IsochRingDepth];
     StatusPipe statusPipes_[kUA55StatusPipeCount];

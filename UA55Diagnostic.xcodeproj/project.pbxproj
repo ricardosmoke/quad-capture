@@ -29,6 +29,8 @@
 		A10000000000000000000093 /* UA55OutputLevel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000060 /* UA55OutputLevel.cpp */; };
 		A10000000000000000000094 /* UA55SensClient.iig in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000096 /* UA55SensClient.iig */; };
 		A10000000000000000000095 /* UA55SensClient.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000097 /* UA55SensClient.cpp */; };
+		A100000000000000000000A1 /* UA55LoCutProperty.iig in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* UA55LoCutProperty.iig */; };
+		A100000000000000000000A3 /* UA55LoCutProperty.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A4 /* UA55LoCutProperty.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -91,6 +93,8 @@
 		A10000000000000000000060 /* UA55OutputLevel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55OutputLevel.cpp; sourceTree = "<group>"; };
 		A10000000000000000000096 /* UA55SensClient.iig */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.driverkit; lastKnownFileType = sourcecode.iig; path = UA55SensClient.iig; sourceTree = "<group>"; };
 		A10000000000000000000097 /* UA55SensClient.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55SensClient.cpp; sourceTree = "<group>"; };
+		A100000000000000000000A2 /* UA55LoCutProperty.iig */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.driverkit; lastKnownFileType = sourcecode.iig; path = UA55LoCutProperty.iig; sourceTree = "<group>"; };
+		A100000000000000000000A4 /* UA55LoCutProperty.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = UA55LoCutProperty.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -162,6 +166,8 @@
 				A10000000000000000000060 /* UA55OutputLevel.cpp */,
 				A10000000000000000000096 /* UA55SensClient.iig */,
 				A10000000000000000000097 /* UA55SensClient.cpp */,
+				A100000000000000000000A2 /* UA55LoCutProperty.iig */,
+				A100000000000000000000A4 /* UA55LoCutProperty.cpp */,
 				A10000000000000000000049 /* Info.plist */,
 				A1000000000000000000004A /* UA55DiagnosticDriver.entitlements */,
 			);
@@ -349,6 +355,8 @@
 				A10000000000000000000093 /* UA55OutputLevel.cpp in Sources */,
 				A10000000000000000000094 /* UA55SensClient.iig in Sources */,
 				A10000000000000000000095 /* UA55SensClient.cpp in Sources */,
+				A100000000000000000000A1 /* UA55LoCutProperty.iig in Sources */,
+				A100000000000000000000A3 /* UA55LoCutProperty.cpp in Sources */,
 				A10000000000000000000036 /* UA55DescriptorWalk.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -418,7 +426,7 @@
 				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticApp/UA55DiagnosticApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 59;
 				DEVELOPMENT_TEAM = 7PX7924N68;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -440,7 +448,7 @@
 				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticApp/UA55DiagnosticApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 59;
 				DEVELOPMENT_TEAM = 7PX7924N68;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -462,7 +470,7 @@
 				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticDriver/UA55DiagnosticDriver.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 59;
 				DEVELOPMENT_TEAM = 7PX7924N68;
 				DRIVERKIT_DEPLOYMENT_TARGET = 21.0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -489,7 +497,7 @@
 				ARCHS = arm64;
 				CODE_SIGN_ENTITLEMENTS = UA55DiagnosticDriver/UA55DiagnosticDriver.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 59;
 				DEVELOPMENT_TEAM = 7PX7924N68;
 				DRIVERKIT_DEPLOYMENT_TARGET = 21.0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -515,7 +523,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 59;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Shared";
 				MARKETING_VERSION = 0.1.0;
@@ -531,7 +539,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 59;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Shared";
 				MARKETING_VERSION = 0.1.0;

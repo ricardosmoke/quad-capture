@@ -14,6 +14,7 @@
 		B20000000000000000000035 /* PanelModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000045 /* PanelModel.swift */; };
 		B20000000000000000000036 /* HardwareGain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000046 /* HardwareGain.swift */; };
 		B20000000000000000000037 /* PanelLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000047 /* PanelLog.swift */; };
+		B20000000000000000000038 /* LoCutMIDI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000048 /* LoCutMIDI.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,6 +26,7 @@
 		B20000000000000000000045 /* PanelModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelModel.swift; sourceTree = "<group>"; };
 		B20000000000000000000046 /* HardwareGain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareGain.swift; sourceTree = "<group>"; };
 		B20000000000000000000047 /* PanelLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelLog.swift; sourceTree = "<group>"; };
+		B20000000000000000000048 /* LoCutMIDI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoCutMIDI.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +57,7 @@
 				B20000000000000000000045 /* PanelModel.swift */,
 				B20000000000000000000046 /* HardwareGain.swift */,
 				B20000000000000000000047 /* PanelLog.swift */,
+				B20000000000000000000048 /* LoCutMIDI.swift */,
 				B20000000000000000000043 /* Assets.xcassets */,
 			);
 			path = QuadCapturePanel;
@@ -143,6 +146,7 @@
 				B20000000000000000000035 /* PanelModel.swift in Sources */,
 				B20000000000000000000036 /* HardwareGain.swift in Sources */,
 				B20000000000000000000037 /* PanelLog.swift in Sources */,
+				B20000000000000000000038 /* LoCutMIDI.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

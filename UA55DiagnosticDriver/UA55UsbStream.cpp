@@ -1220,6 +1220,14 @@ kern_return_t UA55UsbStream::PrepareMidiPipe()
         return result != kIOReturnSuccess ? result : kIOReturnNoDevice;
     }
 
+    result = midiInterface_->CopyPipe(kUA55MidiOutEndpointAddress, &midiOutPipe_);
+    if (result != kIOReturnSuccess || midiOutPipe_ == nullptr) {
+        os_log(OS_LOG_DEFAULT, "[UA55] MIDI OUT 0x06 pipe=FAILED 0x%08x", (unsigned int)result);
+        OSSafeReleaseNULL(midiOutPipe_);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[UA55] MIDI OUT 0x06 ready");
+    }
+
     for (uint32_t slotIndex = 0; slotIndex < kUA55MidiInSlotCount; slotIndex++) {
         result = PrepareMidiSlot(&midiInSlots_[slotIndex], slotIndex);
         if (result != kIOReturnSuccess) {
@@ -1234,6 +1242,78 @@ kern_return_t UA55UsbStream::PrepareMidiPipe()
 
     os_log(OS_LOG_DEFAULT, "[UA55] MIDI IF2 EP 0x86 ready");
     return kIOReturnSuccess;
+}
+
+namespace {
+
+bool IsLoCutPacket(const uint8_t* bytes, uint32_t length)
+{
+    if (bytes == nullptr || length != 20) {
+        return false;
+    }
+    if (bytes[0] != 0x14 || bytes[4] != 0x14 || bytes[8] != 0x14 || bytes[12] != 0x14 || bytes[16] != 0x16) {
+        return false;
+    }
+    if (bytes[1] != 0xF0 || bytes[2] != 0x41 || bytes[3] != 0x10) {
+        return false;
+    }
+    if (bytes[5] != 0x00 || bytes[6] != 0x00 || bytes[7] != 0x56) {
+        return false;
+    }
+    if (bytes[9] != 0x12 || bytes[10] != 0x00 || bytes[11] != 0x05 || bytes[14] != 0x01) {
+        return false;
+    }
+    if (bytes[18] != 0xF7 || bytes[19] != 0x00) {
+        return false;
+    }
+    const uint8_t channel = bytes[13];
+    const uint8_t value = bytes[15];
+    if (channel > 1 || value > 1) {
+        return false;
+    }
+    const int total = 0x00 + 0x05 + (int)channel + 0x01 + (int)value;
+    const uint8_t sum = (uint8_t)((0 - total) & 0x7F);
+    return bytes[17] == sum;
+}
+
+} // namespace
+
+kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
+{
+    if (!IsLoCutPacket(bytes, length)) {
+        return kIOReturnBadArgument;
+    }
+    if (midiOutPipe_ == nullptr) {
+        return kIOReturnOffline;
+    }
+
+    IOBufferMemoryDescriptor* buffer = nullptr;
+    kern_return_t result = IOBufferMemoryDescriptor::Create(kIOMemoryDirectionOut, length, 0, &buffer);
+    if (result != kIOReturnSuccess || buffer == nullptr) {
+        return result != kIOReturnSuccess ? result : kIOReturnNoMemory;
+    }
+    result = buffer->SetLength(length);
+    if (result != kIOReturnSuccess) {
+        OSSafeReleaseNULL(buffer);
+        return result;
+    }
+    IOAddressSegment range = {};
+    result = buffer->GetAddressRange(&range);
+    if (result != kIOReturnSuccess || range.address == 0) {
+        OSSafeReleaseNULL(buffer);
+        return result != kIOReturnSuccess ? result : kIOReturnNoMemory;
+    }
+    memcpy(reinterpret_cast<void*>(range.address), bytes, length);
+
+    uint32_t transferred = 0;
+    result = midiOutPipe_->IO(buffer, length, &transferred, 1000);
+    OSSafeReleaseNULL(buffer);
+    os_log(OS_LOG_DEFAULT, "[UA55] lo-cut out ch=%u val=%u status=0x%08x transferred=%u",
+           bytes[13], bytes[15], (unsigned int)result, transferred);
+    if (result == kIOReturnSuccess && transferred != length) {
+        return kIOReturnUnderrun;
+    }
+    return result;
 }
 
 kern_return_t UA55UsbStream::StartMidiPolling()
@@ -1492,12 +1572,16 @@ void UA55UsbStream::TearDownMidiPipe(IOService* closer)
     if (midiInPipe_ != nullptr && closer != nullptr) {
         midiInPipe_->Abort(0, kIOReturnAborted, closer);
     }
+    if (midiOutPipe_ != nullptr && closer != nullptr) {
+        midiOutPipe_->Abort(0, kIOReturnAborted, closer);
+    }
     IOSleep(20);
 
     for (uint32_t slotIndex = 0; slotIndex < kUA55MidiInSlotCount; slotIndex++) {
         FreeMidiSlot(&midiInSlots_[slotIndex]);
     }
     OSSafeReleaseNULL(midiInPipe_);
+    OSSafeReleaseNULL(midiOutPipe_);
 
     if (midiInterface_ != nullptr && midiOpened_ && closer != nullptr) {
         midiInterface_->SelectAlternateSetting(0);

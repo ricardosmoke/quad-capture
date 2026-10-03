@@ -4,7 +4,7 @@ An **experimental** open-source audio driver for the [Roland QUAD-CAPTURE](https
 
 Roland’s original Mac driver is old and no longer a good fit for modern macOS. This project aims to make the interface usable again: plug it in, see it in macOS, play and record audio, and watch the hardware preamp knobs on screen.
 
-> **Status:** Playback and recording work at **44.1, 48, and 96 kHz** (4 out / 6 in) and at **192 kHz** (2 out / 2 in). Current driver build **58**.  
+> **Status:** Playback and recording work at **44.1, 48, and 96 kHz** (4 out / 6 in) and at **192 kHz** (2 out / 2 in). Current driver build **59**.  
 > This is **not** an official Roland product. Use at your own risk.
 
 ---
@@ -26,7 +26,7 @@ In plain terms: after you install the driver, the QUAD-CAPTURE should behave lik
 
 ## What it does *not* do (yet)
 
-- **No full Roland Control Panel.** The companion app only *displays* what the box already does. It does not change preamp gain, compressor, mixer, or any other setting on the hardware. Nothing is sent to the interface.
+- **No full Roland Control Panel.** The companion app displays the hardware SENS knobs and AUTO SENS, and the LO-CUT buttons send the Roland SysEx through the driver. It does not change preamp gain, PHASE, compressor, mixer, or any other setting.
 - **On-screen compressor and mixer knobs are local.** They do not follow or drive the box. Sample rate is the exception: the footer control asks Core Audio to change the device clock, the same way Audio MIDI Setup does.
 - **Not signed for mass distribution.** You need an Apple Developer account and must approve a system extension on your Mac.
 - **Apple Silicon only.** Not aimed at Intel Macs.
@@ -99,7 +99,7 @@ systemextensionsctl list
 log show --last 10m --style compact --predicate 'eventMessage CONTAINS "[UA55]"'
 ```
 
-You want a log line that mentions **`BUILD 58`** (or whatever build you just installed). On plug-in the driver prints `[UA55] ========== BUILD 58 loaded`.
+You want a log line that mentions **`BUILD 59`** (or whatever build you just installed). On plug-in the driver prints `[UA55] ========== BUILD 59 loaded`.
 
 ### 4. Control panel (optional)
 
@@ -114,7 +114,7 @@ xcodebuild -project QuadCapturePanelMac/QuadCapturePanel.xcodeproj \
 
 Copy `QuadCapturePanel.app` to **Applications** and open it. The SENS readouts move when you turn the knobs on the box. AUTO SENS lights when the hardware button is on and goes gray when it is off.
 
-The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 58: deactivate, install the new app, activate, and reconnect the USB cable.
+The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 59: deactivate, install the new app, activate, and reconnect the USB cable. LO-CUT needs that same build: the click sends the SysEx through the driver.
 
 ---
 
@@ -126,7 +126,7 @@ The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If
 | `UA55DiagnosticDriver` | The audio + USB driver (dext), including SENS and AUTO SENS logging |
 | `Shared/` | USB constants, sample-rate table, and helpers shared by the driver |
 | `docs/` | Build, entitlements, design notes |
-| `QuadCapturePanelMac/` | On-screen panel. Optional for audio. Displays hardware SENS and AUTO SENS; does not command the box |
+| `QuadCapturePanelMac/` | On-screen panel. Optional for audio. Displays hardware SENS and AUTO SENS. LO-CUT sends SysEx through the driver |
 
 ---
 
@@ -135,9 +135,9 @@ The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If
 | Symptom | What to try |
 | --- | --- |
 | Device never appears | Extension not approved, or the app is not under `/Applications`. Check `systemextensionsctl list`. |
-| Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] ========== BUILD 58 loaded`. |
+| Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] ========== BUILD 59 loaded`. |
 | Sample rate will not stick | Pick the rate in Audio MIDI Setup, then reconnect if the device disappears. 192 kHz is stereo only (2 out / 2 in). |
-| Panel knobs do not follow the hardware | The loaded dext is not logging SENS. Reactivate build 58 and reconnect. The panel does not send settings to the box. |
+| Panel knobs do not follow the hardware | The loaded dext is not logging SENS. Reactivate build 59 and reconnect. |
 
 Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
@@ -145,9 +145,9 @@ Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
 ## Stability note
 
-**Build 58** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, and a read-only view of the preamp knobs and AUTO SENS.
+**Build 59** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, a read-only view of the preamp knobs and AUTO SENS, and LO-CUT SysEx written to USB MIDI cable 1.
 
-An older extension stays in force until you deactivate it and activate the copy in `/Applications`. The log line `BUILD 58` is the check that the new dext actually loaded.
+An older extension stays in force until you deactivate it and activate the copy in `/Applications`. The log line `BUILD 59` is the check that the new dext actually loaded.
 
 ---
 

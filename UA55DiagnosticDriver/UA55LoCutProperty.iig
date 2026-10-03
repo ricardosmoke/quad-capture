@@ -1,0 +1,23 @@
+#ifndef UA55LoCutProperty_h
+#define UA55LoCutProperty_h
+
+#include <AudioDriverKit/IOUserAudioCustomProperty.iig>
+
+class UA55LoCutProperty: public IOUserAudioCustomProperty
+{
+public:
+    virtual bool init(IOUserAudioDriver* in_audio_driver,
+                      IOUserAudioObjectPropertyAddress in_prop_addr,
+                      bool in_is_property_settable,
+                      IOUserAudioCustomPropertyDataType in_qualifier_data_type,
+                      IOUserAudioCustomPropertyDataType in_data_type) override;
+    virtual void free(void) override;
+
+    virtual kern_return_t HandleChangeCustomPropertyDataValueWithQualifier(OSObject* in_qualifier_data,
+                                                                           OSObject* in_data) override;
+
+    // usbStreamAddr 0 desliga o alvo (unplug).
+    virtual void BindStream(uint64_t usbStreamAddr) LOCALONLY;
+};
+
+#endif

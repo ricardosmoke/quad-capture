@@ -246,6 +246,14 @@ kern_return_t UA55AudioDriver::NewUserClient_Impl(uint32_t type, IOUserClient** 
     return kIOReturnSuccess;
 }
 
+kern_return_t UA55AudioDriver::SendMidi(const uint8_t* bytes, uint32_t length)
+{
+    if (ivars == nullptr || ivars->usbStream == nullptr) {
+        return kIOReturnOffline;
+    }
+    return ivars->usbStream->SendMidi(bytes, length);
+}
+
 void UA55AudioDriver::CopyHardwareSens(uint8_t* left, uint8_t* right)
 {
     if (ivars != nullptr && ivars->usbStream != nullptr) {

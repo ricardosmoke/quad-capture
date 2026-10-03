@@ -9,6 +9,7 @@
 #include <AudioDriverKit/AudioDriverKit.h>
 
 #include "UA55AudioDevice.h"
+#include "UA55LoCutProperty.h"
 #include "UA55MuteControl.h"
 #include "UA55UsbStream.h"
 #include "UA55VolumeControl.h"
@@ -34,6 +35,7 @@ struct UA55AudioDevice_IVars {
     OSSharedPtr<UA55MuteControl> muteMain;
     OSSharedPtr<UA55MuteControl> muteLeft;
     OSSharedPtr<UA55MuteControl> muteRight;
+    OSSharedPtr<UA55LoCutProperty> loCut;
     volatile uint64_t sampleTime;
     uint64_t lastPublishedZts;
     uint64_t hostTicksPerPeriod;
@@ -224,6 +226,30 @@ bool AddOutputMute(UA55AudioDevice* device,
     return true;
 }
 
+bool AddLoCut(UA55AudioDevice* device, IOUserAudioDriver* driver, OSSharedPtr<UA55LoCutProperty>& slot)
+{
+    IOUserAudioObjectPropertyAddress address = {};
+    address.mSelector = 0x754C6374u;
+    address.mScope = IOUserAudioObjectPropertyScope::Global;
+    address.mElement = IOUserAudioObjectPropertyElementMain;
+    auto prop = OSSharedPtr(OSTypeAlloc(UA55LoCutProperty), OSNoRetain);
+    if (prop.get() == nullptr) {
+        return false;
+    }
+    if (!prop->init(driver,
+                    address,
+                    true,
+                    IOUserAudioCustomPropertyDataType::None,
+                    IOUserAudioCustomPropertyDataType::String)) {
+        return false;
+    }
+    if (device->AddCustomProperty(prop.get()) != kIOReturnSuccess) {
+        return false;
+    }
+    slot = prop;
+    return true;
+}
+
 } // namespace
 
 extern "C" void UA55AudioDevicePublishTimestamp(void* device, uint64_t sampleTime, uint64_t hostTime)
@@ -341,6 +367,9 @@ bool UA55AudioDevice::init(IOUserAudioDriver* in_driver,
     if (!volumesOk) {
         os_log(OS_LOG_DEFAULT, "[UA55] output volume controls failed — level stays full scale");
     }
+    if (!AddLoCut(this, in_driver, ivars->loCut)) {
+        os_log(OS_LOG_DEFAULT, "[UA55] lo-cut property failed");
+    }
 
     error = SetIOOperationHandler(^kern_return_t(IOUserAudioObjectID,
                                                  IOUserAudioIOOperation operation,
@@ -445,6 +474,9 @@ kern_return_t UA55AudioDevice::ConfigureHardware(uint64_t usbStreamAddr)
     }
     if (ivars->muteRight.get() != nullptr) {
         ivars->muteRight->BindStream(usbStreamAddr, 1);
+    }
+    if (ivars->loCut.get() != nullptr) {
+        ivars->loCut->BindStream(usbStreamAddr);
     }
     if (ivars->usbStream != nullptr) {
         const UA55RateConfig* hardware = UA55RateForHz((double)ivars->usbStream->CurrentRate());

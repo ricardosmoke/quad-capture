@@ -1,0 +1,187 @@
+import CoreAudio
+import CoreMIDI
+import Foundation
+
+/// DT1 de LO-CUT da UA-55, no cabo USB MIDI 1 (o cabo 0 é o DIN).
+enum LoCutMIDI {
+    private static var client = MIDIClientRef()
+    private static var output = MIDIPortRef()
+    private static var opened = false
+    /// 'uLct' — propriedade do device de áudio. O dext escreve o pacote no bulk OUT 0x06.
+    private static let driverSelector: AudioObjectPropertySelector = 0x754C6374
+
+    /// `channel` 0 é o canal 1 da tela. `on` true envia 01.
+    static func send(channel: UInt8, on: Bool) -> String? {
+        guard channel <= 1 else { return "Falha ao enviar LO-CUT" }
+        let sysex = message(channel: channel, on: on)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logSend(channel: channel, on: on, dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar LO-CUT (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logSend(channel: channel, on: on, dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar LO-CUT (\(status))"
+        }
+        return nil
+    }
+
+    private static func logSend(channel: UInt8, on: Bool, dest: String, wrap: Bool, status: OSStatus, bytes: [UInt8]) {
+        let hex = bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
+        PanelLog.write("lo-cut ch=\(channel) on=\(on ? 1 : 0) dest=\(dest) wrap=\(wrap ? 1 : 0) status=\(status) \(hex)")
+    }
+
+    /// O CoreMIDI não publica a UA-55. O dext recebe estes bytes pela propriedade de áudio 'uLct'.
+    private static func sendToDriver(_ bytes: [UInt8]) -> OSStatus {
+        guard let device = UA55Device.find() else { return kAudioHardwareBadDeviceError }
+        let hex = bytes.map { String(format: "%02X", $0) }.joined() as CFString
+        var raw = Unmanaged.passUnretained(hex).toOpaque()
+        var address = AudioObjectPropertyAddress(
+            mSelector: driverSelector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        return AudioObjectSetPropertyData(
+            device, &address, 0, nil, UInt32(MemoryLayout<UnsafeMutableRawPointer?>.size), &raw)
+    }
+
+    private static func message(channel: UInt8, on: Bool) -> [UInt8] {
+        let value: UInt8 = on ? 0x01 : 0x00
+        let total = 0x00 + 0x05 + Int(channel) + 0x01 + Int(value)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x01, value, sum, 0xF7]
+    }
+
+    /// Pacotes USB MIDI 1.0. Nibble alto = cabo. O fim de 2 bytes usa CIN 0x6.
+    private static func usbPackets(cable: UInt8, sysex: [UInt8]) -> [UInt8] {
+        var out: [UInt8] = []
+        var index = 0
+        while index < sysex.count {
+            let take = min(3, sysex.count - index)
+            let cin: UInt8
+            if take == 3 {
+                cin = sysex[index + 2] == 0xF7 ? 0x07 : 0x04
+            } else if take == 2 {
+                cin = 0x06
+            } else {
+                cin = 0x05
+            }
+            out.append((cable << 4) | cin)
+            out.append(sysex[index])
+            out.append(take > 1 ? sysex[index + 1] : 0)
+            out.append(take > 2 ? sysex[index + 2] : 0)
+            index += take
+        }
+        return out
+    }
+
+    private struct Target {
+        var endpoint: MIDIEndpointRef
+        var name: String
+        /// CoreMIDI só publicou o DIN: os bytes já vão com o nibble do cabo 1.
+        var wrapCable: Bool
+    }
+
+    private static func findTarget() -> Target? {
+        let devices = MIDIGetNumberOfDevices()
+        for index in 0..<devices {
+            let device = MIDIGetDevice(index)
+            guard device != 0, isQuad(device) else { continue }
+            let entities = MIDIDeviceGetNumberOfEntities(device)
+            if entities >= 2, let destination = firstDestination(MIDIDeviceGetEntity(device, 1)) {
+                return Target(endpoint: destination, name: displayName(destination), wrapCable: false)
+            }
+            if entities >= 1, let destination = firstDestination(MIDIDeviceGetEntity(device, 0)) {
+                return Target(endpoint: destination, name: displayName(destination), wrapCable: true)
+            }
+        }
+
+        var found: [(MIDIEndpointRef, String)] = []
+        let count = MIDIGetNumberOfDestinations()
+        for index in 0..<count {
+            let destination = MIDIGetDestination(index)
+            guard destination != 0 else { continue }
+            let name = displayName(destination)
+            if isQuadName(name) {
+                found.append((destination, name))
+            }
+        }
+        if let control = found.first(where: { isControlPort($0.1) }) {
+            return Target(endpoint: control.0, name: control.1, wrapCable: false)
+        }
+        if found.count == 1 {
+            return Target(endpoint: found[0].0, name: found[0].1, wrapCable: true)
+        }
+        return nil
+    }
+
+    private static func firstDestination(_ entity: MIDIEntityRef) -> MIDIEndpointRef? {
+        guard entity != 0, MIDIEntityGetNumberOfDestinations(entity) > 0 else { return nil }
+        let destination = MIDIEntityGetDestination(entity, 0)
+        return destination == 0 ? nil : destination
+    }
+
+    private static func isQuad(_ object: MIDIObjectRef) -> Bool {
+        isQuadName(displayName(object)) || isQuadName(stringProperty(object, kMIDIPropertyModel))
+    }
+
+    private static func isQuadName(_ name: String) -> Bool {
+        let folded = name.lowercased()
+        return folded.contains("quad-capture") || folded.contains("quad capture") || folded.contains("ua-55") || folded.contains("ua55")
+    }
+
+    /// Porta 2 do CoreMIDI é o cabo 1 (a porta 1 é o DIN).
+    private static func isControlPort(_ name: String) -> Bool {
+        let folded = name.lowercased()
+        return folded.contains("port 2") || folded.contains("midi 2") || folded.contains("cable 2")
+            || folded.contains("ctrl") || folded.contains("control")
+    }
+
+    private static func displayName(_ object: MIDIObjectRef) -> String {
+        let display = stringProperty(object, kMIDIPropertyDisplayName)
+        if !display.isEmpty { return display }
+        return stringProperty(object, kMIDIPropertyName)
+    }
+
+    private static func stringProperty(_ object: MIDIObjectRef, _ key: CFString) -> String {
+        var value: Unmanaged<CFString>?
+        guard MIDIObjectGetStringProperty(object, key, &value) == noErr, let value else { return "" }
+        return value.takeRetainedValue() as String
+    }
+
+    private static func transmit(_ bytes: [UInt8], to destination: MIDIEndpointRef) -> OSStatus {
+        let readyStatus = prepare()
+        if readyStatus != noErr { return readyStatus }
+        var storage = [UInt8](repeating: 0, count: 256)
+        return storage.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress else { return kMIDIInvalidClient }
+            let list = base.assumingMemoryBound(to: MIDIPacketList.self)
+            let packet = MIDIPacketListInit(list)
+            let added = bytes.withUnsafeBufferPointer { buffer -> Bool in
+                guard let data = buffer.baseAddress else { return false }
+                return MIDIPacketListAdd(list, 256, packet, 0, buffer.count, data) != nil
+            }
+            guard added else { return kMIDIUnknownError }
+            return MIDISend(output, destination, list)
+        }
+    }
+
+    private static func prepare() -> OSStatus {
+        if opened { return noErr }
+        var status = MIDIClientCreate("QuadCapturePanel" as CFString, nil, nil, &client)
+        if status != noErr { return status }
+        status = MIDIOutputPortCreate(client, "LoCut" as CFString, &output)
+        if status != noErr { return status }
+        opened = true
+        return noErr
+    }
+}

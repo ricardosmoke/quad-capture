@@ -39,6 +39,12 @@ struct PanelView: View {
                 SampleRateButton(frame: rateFrame) {
                     rateMenuOpen.toggle()
                 }
+
+                ForEach(0..<2, id: \.self) { channel in
+                    LoCutButton(frame: layout.viewRect(for: PanelLayout.loCutHit(channel: channel))) {
+                        model.toggleLoCut(channel: channel)
+                    }
+                }
             }
         }
         .onAppear {
@@ -87,6 +93,13 @@ struct PanelLayout {
 
     /// Caixa SAMPLE RATE no rodapé (design 866×592).
     static let sampleRateHit = CGRect(x: 150, y: 563, width: 110, height: 24)
+
+    /// LO-CUT dentro de `channel`: (x+36, y+8, 72, 30). Canal 0 fica em y=78, canal 1 em y=356.
+    static func loCutHit(channel: Int) -> CGRect {
+        let channelX: CGFloat = 16
+        let channelY: CGFloat = channel == 0 ? 78 : 356
+        return CGRect(x: channelX + 36, y: channelY + 8, width: 72, height: 30)
+    }
 
     /// Posições dos knobs alinhadas ao Canvas.
     static let knobs: [KnobSpec] = [
@@ -141,6 +154,20 @@ struct KnobHandle: View {
                     }
             )
             .help("Arraste para ajustar")
+    }
+}
+
+struct LoCutButton: View {
+    let frame: CGRect
+    let action: () -> Void
+
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .frame(width: frame.width, height: frame.height)
+            .position(x: frame.midX, y: frame.midY)
+            .onTapGesture(perform: action)
+            .help("Ligar ou desligar o LO-CUT")
     }
 }
 
@@ -272,7 +299,7 @@ enum PanelCanvas {
         let channel2Y = y + 318
         channel(
             &context, x + 8, channel1Y, "1", state.sens1Text, PanelModel.knobAngle(state.sens1),
-            level: state.pre1, peak: state.pre1Peak)
+            level: state.pre1, peak: state.pre1Peak, loCutOn: state.loCut1)
         let buttonW: CGFloat = 72
         let buttonH: CGFloat = 40
         let gapTop = channel1Y + 182
@@ -285,17 +312,17 @@ enum PanelCanvas {
             "AUTO SENS", gray: state.autoSensText != "on")
         channel(
             &context, x + 8, channel2Y, "2", state.sens2Text, PanelModel.knobAngle(state.sens2),
-            level: state.pre2, peak: state.pre2Peak)
+            level: state.pre2, peak: state.pre2Peak, loCutOn: state.loCut2)
     }
 
     private static func channel(
         _ context: inout GraphicsContext,
         _ x: CGFloat, _ y: CGFloat,
         _ number: String, _ sens: String, _ sensAngle: CGFloat,
-        level: CGFloat, peak: CGFloat
+        level: CGFloat, peak: CGFloat, loCutOn: Bool
     ) {
         text(&context, number, x, y + 36, 28, 40, 28, ink, bold: true)
-        button(&context, x + 36, y + 8, 72, 30, "LO-CUT", gray: false)
+        button(&context, x + 36, y + 8, 72, 30, "LO-CUT", gray: !loCutOn)
         button(&context, x + 36, y + 44, 72, 26, "PHASE", gray: false)
         meter(&context, x + 118, y + 4, 118, level, peak: peak, showClip: true)
         text(&context, "SENS", x + 36, y + 78, 72, 16, 10, label, bold: false)
@@ -372,6 +399,9 @@ enum PanelCanvas {
 
         text(&context, "CLOCK", 290, footerY, 70, 34, 13, label, bold: true, left: true)
         text(&context, "INTERNAL", 360, footerY, 120, 34, 14, clock, bold: true, left: true)
+        if !state.loCutStatus.isEmpty {
+            text(&context, state.loCutStatus, 488, footerY, 270, 34, 10, Color(hex: 0xFF8A80), bold: false, left: true)
+        }
 
         let live = state.connected
         fill(&context, circle(766, footerY + 17, 5), live ? lcdGreen : Color(hex: 0xFF3A32))

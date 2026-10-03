@@ -23,6 +23,9 @@ final class PanelModel: ObservableObject {
         var sens1Text: String = "—"
         var sens2Text: String = "—"
         var autoSensText: String = "—"
+        var loCut1: Bool = false
+        var loCut2: Bool = false
+        var loCutStatus: String = ""
         var comp1 = CompStrip()
         var comp2 = CompStrip()
         var mixOutput: Double = 0.7
@@ -48,6 +51,10 @@ final class PanelModel: ObservableObject {
     private var sens1Known = false
     private var sens2Known = false
     @Published var autoSensText: String = "—"
+    @Published var loCut1 = false
+    @Published var loCut2 = false
+    @Published var loCutStatus = ""
+    private var loCutBusy = false
     @Published var comp1 = CompStrip()
     @Published var comp2 = CompStrip()
     @Published var mixOutput: Double = 0.7
@@ -69,6 +76,9 @@ final class PanelModel: ObservableObject {
         s.sens1Text = sens1Known ? String(HardwareGain.db(fromNormalized: sens1)) : "—"
         s.sens2Text = sens2Known ? String(HardwareGain.db(fromNormalized: sens2)) : "—"
         s.autoSensText = autoSensText
+        s.loCut1 = loCut1
+        s.loCut2 = loCut2
+        s.loCutStatus = loCutStatus
         s.comp1 = comp1
         s.comp2 = comp2
         s.mixOutput = mixOutput
@@ -92,6 +102,29 @@ final class PanelModel: ObservableObject {
 
     func setSampleRate(_ hz: Double) {
         monitor.setSampleRate(hz)
+    }
+
+    /// Canal 0 da tela é o SysEx canal 0; canal 1 da tela é o SysEx canal 1.
+    func toggleLoCut(channel: Int) {
+        guard channel == 0 || channel == 1, !loCutBusy else { return }
+        let turningOn = channel == 0 ? !loCut1 : !loCut2
+        loCutBusy = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.send(channel: UInt8(channel), on: turningOn)
+            Task { @MainActor in
+                guard let self else { return }
+                self.loCutBusy = false
+                if let error {
+                    self.loCutStatus = error
+                } else if channel == 0 {
+                    self.loCut1 = turningOn
+                    self.loCutStatus = ""
+                } else {
+                    self.loCut2 = turningOn
+                    self.loCutStatus = ""
+                }
+            }
+        }
     }
 
     func start() {
