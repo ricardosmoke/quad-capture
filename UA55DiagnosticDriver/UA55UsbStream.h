@@ -51,8 +51,9 @@ public:
 
     // Chamado no fio USB quando chega DT1 de SENS.
     void SetSensListener(void* context, void (*listener)(void* context, uint8_t channel, uint8_t db));
-    // Pacote USB MIDI de 20 bytes no cabo 1.
+    // Pacote USB MIDI no cabo 1.
     // LO-CUT é o parâmetro 01, PHASE é o 02. AUTO-SENS é o pacote fixo 00 02 01 02 / 01.
+    // O RQ1 de estado tem 24 bytes: endereço 01 00 00 00, tamanho 59.
     kern_return_t SendMidi(const uint8_t* bytes, uint32_t length);
     // 255 = esse canal ainda não chegou. Leitura lock-free para o user client.
     void CopySens(uint8_t* left, uint8_t* right) const;

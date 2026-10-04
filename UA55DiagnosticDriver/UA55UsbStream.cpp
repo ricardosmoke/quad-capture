@@ -1300,13 +1300,27 @@ bool IsAutoSensPacket(const uint8_t* bytes, uint32_t length)
     return bytes != nullptr && length == 20 && memcmp(bytes, packet, 20) == 0;
 }
 
+bool IsStateRequestPacket(const uint8_t* bytes, uint32_t length)
+{
+    static const uint8_t packet[24] = {
+        0x14, 0xF0, 0x41, 0x10,
+        0x14, 0x00, 0x00, 0x56,
+        0x14, 0x11, 0x01, 0x00,
+        0x14, 0x00, 0x00, 0x00,
+        0x14, 0x00, 0x00, 0x3B,
+        0x16, 0x44, 0xF7, 0x00
+    };
+    return bytes != nullptr && length == 24 && memcmp(bytes, packet, 24) == 0;
+}
+
 } // namespace
 
 kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
 {
     const bool loCut = IsLoCutPacket(bytes, length);
     const bool autoSens = IsAutoSensPacket(bytes, length);
-    if (!loCut && !autoSens) {
+    const bool stateRequest = IsStateRequestPacket(bytes, length);
+    if (!loCut && !autoSens && !stateRequest) {
         return kIOReturnBadArgument;
     }
     if (midiOutPipe_ == nullptr) {
@@ -1334,7 +1348,10 @@ kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
     uint32_t transferred = 0;
     result = midiOutPipe_->IO(buffer, length, &transferred, 1000);
     OSSafeReleaseNULL(buffer);
-    if (autoSens) {
+    if (stateRequest) {
+        os_log(OS_LOG_DEFAULT, "[UA55] state rq1 status=0x%08x transferred=%u",
+               (unsigned int)result, transferred);
+    } else if (autoSens) {
         os_log(OS_LOG_DEFAULT, "[UA55] autosens press status=0x%08x transferred=%u",
                (unsigned int)result, transferred);
     } else {
@@ -1527,6 +1544,19 @@ void UA55UsbStream::HandleSysEx(const uint8_t* msg, uint32_t length)
     const uint8_t* addr = msg + 7;
     const uint8_t data = msg[11];
     const uint32_t dataBytes = length - 13;
+    // RQ1 01 00 00 00 / 59 bytes. O log curto de 8 bytes não chega na tela.
+    if (dataBytes == 59 && addr[0] == 0x01 && addr[1] == 0x00 && addr[2] == 0x00 && addr[3] == 0x00) {
+        char hex[4 * 2 + 59 * 2 + 1];
+        uint32_t used = 0;
+        for (uint32_t index = 0; index < 4; index++) {
+            used += (uint32_t)snprintf(hex + used, sizeof(hex) - used, "%02x", addr[index]);
+        }
+        for (uint32_t index = 0; index < 59; index++) {
+            used += (uint32_t)snprintf(hex + used, sizeof(hex) - used, "%02x", msg[11 + index]);
+        }
+        os_log(OS_LOG_DEFAULT, "[UA55] dt1 %{public}s", hex);
+        return;
+    }
     // 00 05 <canal> 04 = SENS daquele preamp. O byte vai de 0 a 127
     // (máximo de um byte MIDI); acima de 54 continua o mesmo ganho.
     // 00 02 01 03 = AUTO SENS: 02 ligado, 00 desligado. O par 00 02 01 02

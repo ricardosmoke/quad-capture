@@ -99,7 +99,7 @@ systemextensionsctl list
 log show --last 10m --style compact --predicate 'eventMessage CONTAINS "[UA55]"'
 ```
 
-You want a log line that mentions **`BUILD 62`** (or whatever build you just installed). On plug-in the driver prints `[UA55] ========== BUILD 62 loaded`.
+You want a log line that mentions **`BUILD 63`** (or whatever build you just installed). On plug-in the driver prints `[UA55] ========== BUILD 63 loaded`.
 
 ### 4. Control panel (optional)
 
@@ -114,7 +114,7 @@ xcodebuild -project QuadCapturePanelMac/QuadCapturePanel.xcodeproj \
 
 Copy `QuadCapturePanel.app` to **Applications** and open it. The SENS readouts move when you turn the knobs on the box. AUTO SENS lights when the hardware button is on and goes gray when it is off.
 
-The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 62: deactivate, install the new app, activate, and reconnect the USB cable. LO-CUT, PHASE, AUTO SENS, and the SENS knobs need that same build: the click or drag sends the SysEx through the driver.
+The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 63: deactivate, install the new app, activate, and reconnect the USB cable. LO-CUT, PHASE, AUTO SENS, and the SENS knobs need that same build: the click or drag sends the SysEx through the driver. Opening the panel, or the board coming back after it was off, sends one state request on that same path.
 
 ---
 
@@ -135,9 +135,9 @@ The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If
 | Symptom | What to try |
 | --- | --- |
 | Device never appears | Extension not approved, or the app is not under `/Applications`. Check `systemextensionsctl list`. |
-| Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] ========== BUILD 62 loaded`. |
+| Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] ========== BUILD 63 loaded`. |
 | Sample rate will not stick | Pick the rate in Audio MIDI Setup, then reconnect if the device disappears. 192 kHz is stereo only (2 out / 2 in). |
-| Panel knobs do not follow the hardware | The loaded dext is not logging SENS. Reactivate build 62 and reconnect. |
+| Panel knobs do not follow the hardware | The loaded dext is not logging SENS. Reactivate build 63 and reconnect. |
 
 Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
@@ -145,9 +145,9 @@ Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
 ## Stability note
 
-**Build 62** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, a read-only view of the preamp knobs until you drag them, and LO-CUT, PHASE, AUTO SENS, and SENS SysEx written to USB MIDI cable 1.
+**Build 63** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, a read-only view of the preamp knobs until you drag them, and LO-CUT, PHASE, AUTO SENS, and SENS SysEx written to USB MIDI cable 1. The panel asks for the 59-byte state block once each time the board is connected.
 
-An older extension stays in force until you deactivate it and activate the copy in `/Applications`. The log line `BUILD 62` is the check that the new dext actually loaded.
+An older extension stays in force until you deactivate it and activate the copy in `/Applications`. The log line `BUILD 63` is the check that the new dext actually loaded.
 
 ---
 

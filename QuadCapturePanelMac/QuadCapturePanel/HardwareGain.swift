@@ -4,6 +4,15 @@ import IOKit
 /// SENS 1 e 2 lidos da placa. O DT1 manda duas contagens por dB (108 → 54).
 /// A dext guarda o byte cru. A tela mostra o resultado da divisão.
 /// A leitura é um user client, fora do Core Audio: a propriedade de áudio travava o HAL.
+/// Botões do preamp lidos no DT1 de 59 bytes. nil = esse canal ainda não veio.
+struct PreampSwitches: Equatable {
+    var generation: Int = 0
+    var loCut1: Bool?
+    var loCut2: Bool?
+    var phase1: Bool?
+    var phase2: Bool?
+}
+
 enum HardwareGain {
     static let sensMinDb: Double = 0
     static let sensMaxDb: Double = 54
@@ -38,6 +47,21 @@ enum HardwareGain {
         SensFeed.shared.remember(state)
     }
 
+    /// LO-CUT e PHASE do bloco de 59 bytes. SENS desse bloco entra em `readSens`.
+    static func preampSwitches() -> PreampSwitches {
+        SensFeed.shared.switches()
+    }
+
+    /// Tela abrindo ou placa de volta: os botões ficam off até a leitura desta conexão.
+    static func beginRead() {
+        SensFeed.shared.beginRead()
+    }
+
+    /// A resposta do RQ1 pode cair antes do `log stream` existir. Esta busca pega o DT1 desta conexão.
+    static func collectState() {
+        SensFeed.shared.collectState()
+    }
+
     static func start() {
         SensFeed.shared.start()
     }
@@ -60,6 +84,18 @@ private final class SensFeed: @unchecked Sendable {
     private var left = 255
     private var right = 255
     private var device = "—"
+    private var loCut: [Bool?] = [nil, nil]
+    private var phase: [Bool?] = [nil, nil]
+    private var buttonGen = 0
+    /// Linhas anteriores a isto são de outra conexão e não acendem botão.
+    private var readAfter: Date?
+    private let logStamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        return formatter
+    }()
     private var stream: Process?
     private var leader: Int32 = -1
     private var reader: DispatchSourceRead?
@@ -111,10 +147,29 @@ private final class SensFeed: @unchecked Sendable {
         return text
     }
 
+    func beginRead() {
+        lock.lock()
+        readAfter = Date()
+        loCut = [false, false]
+        phase = [false, false]
+        device = "off"
+        buttonGen += 1
+        lock.unlock()
+    }
+
     func remember(_ state: String) {
         lock.lock()
         device = state
         lock.unlock()
+    }
+
+    func switches() -> PreampSwitches {
+        lock.lock()
+        defer { lock.unlock() }
+        return PreampSwitches(
+            generation: buttonGen,
+            loCut1: loCut[0], loCut2: loCut[1],
+            phase1: phase[0], phase2: phase[1])
     }
 
     private func openUserClient() -> Bool {
@@ -152,8 +207,8 @@ private final class SensFeed: @unchecked Sendable {
     }
 
     private func startLog() {
-        seedFromShow()
         startStream()
+        seedFromShow()
     }
 
     private func seedFromShow() {
@@ -179,6 +234,7 @@ private final class SensFeed: @unchecked Sendable {
         for line in text.split(whereSeparator: \.isNewline) {
             let text = String(line)
             _ = applyDevice(text)
+            _ = applySetup(text)
             if apply(text) {
                 applied += 1
             }
@@ -188,6 +244,70 @@ private final class SensFeed: @unchecked Sendable {
         let shownRight = right
         lock.unlock()
         PanelLog.write("sens show seed aplicadas=\(applied) sens1=\(shownLeft) sens2=\(shownRight)")
+    }
+
+    /// Procura o DT1 gravado depois de `beginRead`. Para no primeiro bloco de 59 bytes.
+    func collectState() {
+        queue.async { [weak self] in
+            self?.collectStateAttempt(0)
+        }
+    }
+
+    private func collectStateAttempt(_ attempt: Int) {
+        guard attempt < 6 else {
+            PanelLog.write("state read missed")
+            return
+        }
+        if pullStateSinceRead() {
+            return
+        }
+        queue.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.collectStateAttempt(attempt + 1)
+        }
+    }
+
+    private func pullStateSinceRead() -> Bool {
+        lock.lock()
+        let cutoff = readAfter
+        lock.unlock()
+        guard let cutoff else { return false }
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.timeZone = .current
+        stamp.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let start = stamp.string(from: cutoff.addingTimeInterval(-1))
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+        process.arguments = [
+            "show", "--start", start, "--style", "compact",
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1""#
+        ]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            PanelLog.write("state show failed \(error.localizedDescription)")
+            return false
+        }
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+        var found = false
+        for line in text.split(whereSeparator: \.isNewline) {
+            let text = String(line)
+            _ = applyDevice(text)
+            if applySetup(text) {
+                found = true
+            }
+            _ = apply(text)
+        }
+        if found {
+            let shown = switches()
+            PanelLog.write("state lo1=\(shown.loCut1.map { $0 ? 1 : 0 } ?? -1) lo2=\(shown.loCut2.map { $0 ? 1 : 0 } ?? -1) ph1=\(shown.phase1.map { $0 ? 1 : 0 } ?? -1) ph2=\(shown.phase2.map { $0 ? 1 : 0 } ?? -1)")
+        }
+        return found
     }
 
     private func startStream() {
@@ -247,6 +367,10 @@ private final class SensFeed: @unchecked Sendable {
                 lock.unlock()
                 PanelLog.write("device \(shown)")
             }
+            if applySetup(text) {
+                let shown = switches()
+                PanelLog.write("state lo1=\(shown.loCut1.map { $0 ? 1 : 0 } ?? -1) lo2=\(shown.loCut2.map { $0 ? 1 : 0 } ?? -1) ph1=\(shown.phase1.map { $0 ? 1 : 0 } ?? -1) ph2=\(shown.phase2.map { $0 ? 1 : 0 } ?? -1)")
+            }
             if apply(text) {
                 lock.lock()
                 let shownLeft = left
@@ -259,6 +383,7 @@ private final class SensFeed: @unchecked Sendable {
 
     /// true quando o AUTO SENS da placa muda. "on" / "off".
     private func applyDevice(_ message: String) -> Bool {
+        guard isCurrentRead(message) else { return false }
         let state: String
         if message.contains("[UA55] autosens on") {
             state = "on"
@@ -285,6 +410,60 @@ private final class SensFeed: @unchecked Sendable {
         }
         device = state
         return true
+    }
+
+    /// DT1 01 00 00 00 com 59 bytes.
+    /// Byte 23: bit 0 = LO-CUT 1, bit 1 = LO-CUT 2.
+    /// Byte 24: bit 0 = PHASE 1, bit 1 = PHASE 2.
+    /// SENS 1 e 2 são os bytes 25 e 26.
+    /// AUTO-SENS é o byte 21: 02 ligado, 00 desligado. Não devolve comando nenhum.
+    private func applySetup(_ message: String) -> Bool {
+        guard let range = message.range(of: "[UA55] dt1 ") else { return false }
+        let token = message[range.upperBound...].split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+        let hex = token.lowercased()
+        guard hex.count == 126, hex.hasPrefix("01000000"), isCurrentRead(message) else { return false }
+        let body = hex.dropFirst(8)
+        var bytes = [UInt8]()
+        bytes.reserveCapacity(59)
+        var index = body.startIndex
+        while index < body.endIndex {
+            guard let next = body.index(index, offsetBy: 2, limitedBy: body.endIndex),
+                  body.distance(from: index, to: next) == 2,
+                  let value = UInt8(body[index..<next], radix: 16) else {
+                return false
+            }
+            bytes.append(value)
+            index = next
+        }
+        guard bytes.count == 59 else { return false }
+        lock.lock()
+        defer { lock.unlock() }
+        loCut[0] = (bytes[23] & 0x01) != 0
+        loCut[1] = (bytes[23] & 0x02) != 0
+        phase[0] = (bytes[24] & 0x01) != 0
+        phase[1] = (bytes[24] & 0x02) != 0
+        let sens1 = bytes[25]
+        let sens2 = bytes[26]
+        if sens1 <= 108 {
+            left = min(Int(HardwareGain.sensMaxDb), Int(sens1) / 2)
+        }
+        if sens2 <= 108 {
+            right = min(Int(HardwareGain.sensMaxDb), Int(sens2) / 2)
+        }
+        device = bytes[21] == 0x02 ? "on" : "off"
+        buttonGen += 1
+        return true
+    }
+
+    /// O relógio do log compacto. Só a leitura desta conexão passa.
+    private func isCurrentRead(_ message: String) -> Bool {
+        lock.lock()
+        let cutoff = readAfter
+        lock.unlock()
+        guard let cutoff, message.count >= 23 else { return false }
+        let stamp = String(message.prefix(23))
+        guard let when = logStamp.date(from: stamp) else { return false }
+        return when >= cutoff
     }
 
     /// true quando o texto muda um canal.

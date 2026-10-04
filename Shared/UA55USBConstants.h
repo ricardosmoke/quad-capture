@@ -10,7 +10,7 @@ static const uint16_t kUA55ProductID = 0x012F;
 
 // Deve coincidir com CURRENT_PROJECT_VERSION no Xcode (log ao plugar).
 #ifndef UA55_DRIVER_BUILD
-#define UA55_DRIVER_BUILD 62
+#define UA55_DRIVER_BUILD 63
 #endif
 static const uint32_t kUA55DriverBuild = UA55_DRIVER_BUILD;
 
@@ -51,7 +51,8 @@ static const bool kUA55StatusInterruptDrainEnabled = false;
 static const bool kUA55MidiDrainEnabled = true;
 
 // User client só de leitura do ganho. Não passa pelo Core Audio.
-// A placa empurra DT1 quando o knob muda; não se pede RQ1 (isso derrubou a dext).
+// A leitura de estado é um RQ1 só: endereço 01 00 00 00, 59 bytes.
+// Um pedido maior já derrubou a dext; o gate não aceita outro RQ1.
 static const uint32_t kUA55SensUserClientType = 0x55u;
 
 // Probe isoc sync (marco 2): 8 microframes HS (~1 ms com bInterval=1).

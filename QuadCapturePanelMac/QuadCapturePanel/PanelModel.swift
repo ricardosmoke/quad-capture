@@ -66,6 +66,9 @@ final class PanelModel: ObservableObject {
     private var sensEpoch = [0, 0]
     private var sensBaseline = [-1, -1]
     private var sensAccepted = [false, false]
+    private var sawConnected = false
+    private var stateRequested = false
+    private var switchGen = 0
     @Published var comp1 = CompStrip()
     @Published var comp2 = CompStrip()
     @Published var mixOutput: Double = 0.7
@@ -251,12 +254,15 @@ final class PanelModel: ObservableObject {
 
     func start() {
         PanelLog.write("PanelModel.start")
+        showButtonsOff()
         monitor.start()
         HardwareGain.start()
         cancellable = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.levels = self.monitor.snapshot
+                self.noteBoard(self.levels.connected)
+                self.applySetupSwitches()
                 guard !self.sensBusy else { return }
                 self.sensBusy = true
                 let epoch = self.autoSensEpoch
@@ -275,6 +281,55 @@ final class PanelModel: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Sobe uma vez quando a placa aparece e de novo depois que ela some.
+    private func noteBoard(_ connected: Bool) {
+        if connected == sawConnected {
+            return
+        }
+        sawConnected = connected
+        if !connected {
+            stateRequested = false
+            return
+        }
+        guard !stateRequested else { return }
+        stateRequested = true
+        showButtonsOff()
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.requestState()
+            if error == nil {
+                HardwareGain.collectState()
+            }
+            Task { @MainActor in
+                guard let self else { return }
+                if let error {
+                    self.loCutStatus = error
+                }
+            }
+        }
+    }
+
+    /// Antes da leitura desta conexão, LO-CUT, PHASE e AUTO-SENS ficam off.
+    private func showButtonsOff() {
+        autoSensEpoch += 1
+        loCut1 = false
+        loCut2 = false
+        phase1 = false
+        phase2 = false
+        autoSensText = "off"
+        HardwareGain.beginRead()
+    }
+
+    /// O DT1 de 59 bytes só escreve o desenho. Não passa pelos envios.
+    private func applySetupSwitches() {
+        let shown = HardwareGain.preampSwitches()
+        guard shown.generation != switchGen, !loCutBusy else { return }
+        switchGen = shown.generation
+        if let value = shown.loCut1 { loCut1 = value }
+        if let value = shown.loCut2 { loCut2 = value }
+        if let value = shown.phase1 { phase1 = value }
+        if let value = shown.phase2 { phase2 = value }
     }
 
     func stop() {

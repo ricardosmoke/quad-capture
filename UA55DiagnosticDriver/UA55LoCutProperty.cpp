@@ -26,12 +26,23 @@ int HexNibble(char digit)
     return -1;
 }
 
-bool ParsePacket(const char* text, uint8_t out[20])
+bool ParsePacket(const char* text, uint8_t* out, uint32_t capacity, uint32_t* length)
 {
-    if (text == nullptr) {
+    if (text == nullptr || out == nullptr || length == nullptr) {
         return false;
     }
-    for (uint32_t index = 0; index < 20; index++) {
+    uint32_t hexLen = 0;
+    while (text[hexLen] != '\0') {
+        if (hexLen >= capacity * 2) {
+            return false;
+        }
+        hexLen++;
+    }
+    if (hexLen != 40 && hexLen != 48) {
+        return false;
+    }
+    const uint32_t count = hexLen / 2;
+    for (uint32_t index = 0; index < count; index++) {
         const int high = HexNibble(text[index * 2]);
         const int low = HexNibble(text[index * 2 + 1]);
         if (high < 0 || low < 0) {
@@ -39,7 +50,8 @@ bool ParsePacket(const char* text, uint8_t out[20])
         }
         out[index] = (uint8_t)((high << 4) | low);
     }
-    return text[40] == '\0';
+    *length = count;
+    return true;
 }
 
 } // namespace
@@ -80,8 +92,9 @@ kern_return_t UA55LoCutProperty::HandleChangeCustomPropertyDataValueWithQualifie
 {
     (void)in_qualifier_data;
     auto* text = OSDynamicCast(OSString, in_data);
-    uint8_t packet[20];
-    if (text == nullptr || !ParsePacket(text->getCStringNoCopy(), packet)) {
+    uint8_t packet[24];
+    uint32_t length = 0;
+    if (text == nullptr || !ParsePacket(text->getCStringNoCopy(), packet, 24, &length)) {
         return kIOReturnBadArgument;
     }
     if (ivars == nullptr) {
@@ -91,7 +104,7 @@ kern_return_t UA55LoCutProperty::HandleChangeCustomPropertyDataValueWithQualifie
     if (stream == nullptr) {
         return kIOReturnOffline;
     }
-    const kern_return_t sent = stream->SendMidi(packet, 20);
+    const kern_return_t sent = stream->SendMidi(packet, length);
     if (sent != kIOReturnSuccess) {
         return sent;
     }

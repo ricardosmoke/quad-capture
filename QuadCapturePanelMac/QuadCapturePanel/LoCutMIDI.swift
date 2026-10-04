@@ -87,6 +87,31 @@ enum LoCutMIDI {
         return nil
     }
 
+    /// Uma vez por conexão. A resposta DT1 só atualiza a tela.
+    static func requestState() -> String? {
+        let sysex = stateRequest()
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("state rq1", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao ler o estado (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("state rq1", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao ler o estado (\(status))"
+        }
+        return nil
+    }
+
     /// SENS: canal 0 é o knob 1. `step` é o dB da tela vezes 2, de 0 a 108.
     static func sendSens(channel: UInt8, step: UInt8) -> String? {
         guard channel <= 1, step <= 108 else { return "Falha ao enviar SENS" }
@@ -154,6 +179,13 @@ enum LoCutMIDI {
         let total = 0x00 + 0x02 + 0x01 + 0x02 + 0x01
         let sum = UInt8((0 - total) & 0x7F)
         return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x02, 0x01, 0x02, 0x01, sum, 0xF7]
+    }
+
+    /// RQ1 01 00 00 00, tamanho 00 00 00 3B. O checksum 44 é (0 - soma) & 0x7F.
+    private static func stateRequest() -> [UInt8] {
+        let total = 0x01 + 0x00 + 0x00 + 0x00 + 0x00 + 0x00 + 0x00 + 0x3B
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3B, sum, 0xF7]
     }
 
     private static func sensMessage(channel: UInt8, step: UInt8) -> [UInt8] {
