@@ -10,7 +10,7 @@ static const uint16_t kUA55ProductID = 0x012F;
 
 // Deve coincidir com CURRENT_PROJECT_VERSION no Xcode (log ao plugar).
 #ifndef UA55_DRIVER_BUILD
-#define UA55_DRIVER_BUILD 67
+#define UA55_DRIVER_BUILD 69
 #endif
 static const uint32_t kUA55DriverBuild = UA55_DRIVER_BUILD;
 
@@ -54,6 +54,7 @@ static const bool kUA55MidiDrainEnabled = true;
 // A leitura de estado é um RQ1 de 59 bytes no endereço 01 00 00 00.
 // O BYPASS de cada canal é um RQ1 de 1 byte em 00 05 <canal> 06.
 // O LINK é um RQ1 de 1 byte em 00 05 00 05.
+// O GATE de cada canal é um RQ1 de 1 byte em 00 05 <canal> 07.
 // Um pedido maior já derrubou a dext; o gate não aceita outro tamanho.
 static const uint32_t kUA55SensUserClientType = 0x55u;
 

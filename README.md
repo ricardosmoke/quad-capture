@@ -99,7 +99,7 @@ systemextensionsctl list
 log show --last 10m --style compact --predicate 'eventMessage CONTAINS "[UA55]"'
 ```
 
-You want a log line that mentions **`BUILD 67`** (or whatever build you just installed). On plug-in the driver prints `[UA55] ========== BUILD 67 loaded`.
+You want a log line that mentions **`BUILD 69`** (or whatever build you just installed). On plug-in the driver prints `[UA55] ========== BUILD 69 loaded`.
 
 ### 4. Control panel (optional)
 
@@ -114,7 +114,7 @@ xcodebuild -project QuadCapturePanelMac/QuadCapturePanel.xcodeproj \
 
 Copy `QuadCapturePanel.app` to **Applications** and open it. The SENS readouts move when you turn the knobs on the box. AUTO SENS lights when the hardware button is on and goes gray when it is off.
 
-The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 67: deactivate, install the new app, activate, and reconnect the USB cable. LO-CUT, PHASE, AUTO SENS, the SENS knobs, the compressor BYPASS buttons, and LINK need that same build: the click or drag sends the SysEx through the driver. Opening the panel, or the board coming back after it was off, reads LO-CUT, PHASE, AUTO SENS, both BYPASS buttons, and LINK. Each of those clicks sends its command and then asks the board for that same button state again.
+The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 69: deactivate, install the new app, activate, and reconnect the USB cable. LO-CUT, PHASE, AUTO SENS, the SENS knobs, the compressor BYPASS buttons, LINK, and the GATE knobs need that same build: the click or drag sends the SysEx through the driver. Opening the panel, or the board coming back after it was off, reads LO-CUT, PHASE, AUTO SENS, both BYPASS buttons, and LINK. Each of those clicks sends its command and then asks the board for that same button state again.
 
 ---
 
@@ -126,7 +126,7 @@ The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If
 | `UA55DiagnosticDriver` | The audio + USB driver (dext), including SENS and AUTO SENS logging |
 | `Shared/` | USB constants, sample-rate table, and helpers shared by the driver |
 | `docs/` | Build, entitlements, design notes |
-| `QuadCapturePanelMac/` | On-screen panel. Optional for audio. Displays hardware SENS and AUTO SENS. LO-CUT, PHASE, AUTO SENS, the SENS knobs, compressor BYPASS, and LINK send SysEx through the driver |
+| `QuadCapturePanelMac/` | On-screen panel. Optional for audio. Displays hardware SENS and AUTO SENS. LO-CUT, PHASE, AUTO SENS, the SENS knobs, compressor BYPASS, LINK, and GATE send SysEx through the driver |
 
 ---
 
@@ -135,9 +135,9 @@ The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If
 | Symptom | What to try |
 | --- | --- |
 | Device never appears | Extension not approved, or the app is not under `/Applications`. Check `systemextensionsctl list`. |
-| Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] ========== BUILD 67 loaded`. |
+| Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] ========== BUILD 69 loaded`. |
 | Sample rate will not stick | Pick the rate in Audio MIDI Setup, then reconnect if the device disappears. 192 kHz is stereo only (2 out / 2 in). |
-| Panel knobs do not follow the hardware | The loaded dext is not logging SENS. Reactivate build 67 and reconnect. |
+| Panel knobs do not follow the hardware | The loaded dext is not logging SENS. Reactivate build 69 and reconnect. |
 
 Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
@@ -145,9 +145,9 @@ Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
 ## Stability note
 
-**Build 67** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, a read-only view of the preamp knobs until you drag them, and LO-CUT, PHASE, AUTO SENS, SENS, compressor BYPASS, and LINK SysEx written to USB MIDI cable 1. The panel asks for the 59-byte state block, both BYPASS channels, and LINK when the board connects and again after each of those buttons is clicked.
+**Build 69** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, a read-only view of the preamp knobs until you drag them, and LO-CUT, PHASE, AUTO SENS, SENS, compressor BYPASS, LINK, and GATE SysEx written to USB MIDI cable 1. The panel asks for the 59-byte state block, both BYPASS channels, LINK, and both GATE knobs when the board connects and again after each of those buttons is clicked.
 
-An older extension stays in force until you deactivate it and activate the copy in `/Applications`. The log line `BUILD 67` is the check that the new dext actually loaded.
+An older extension stays in force until you deactivate it and activate the copy in `/Applications`. The log line `BUILD 69` is the check that the new dext actually loaded.
 
 ---
 

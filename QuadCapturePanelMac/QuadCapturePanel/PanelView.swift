@@ -287,18 +287,18 @@ extension PanelModel {
         switch id {
         case .sens1: return Binding(get: { self.sens1 }, set: { self.userSetSens(channel: 0, normalized: $0) })
         case .sens2: return Binding(get: { self.sens2 }, set: { self.userSetSens(channel: 1, normalized: $0) })
-        case .comp1Gate: return Binding(get: { self.comp1.gate }, set: { self.comp1.gate = $0 })
-        case .comp1Threshold: return Binding(get: { self.comp1.threshold }, set: { self.comp1.threshold = $0 })
-        case .comp1Ratio: return Binding(get: { self.comp1.ratio }, set: { self.comp1.ratio = $0 })
-        case .comp1Attack: return Binding(get: { self.comp1.attack }, set: { self.comp1.attack = $0 })
-        case .comp1Release: return Binding(get: { self.comp1.release }, set: { self.comp1.release = $0 })
-        case .comp1Gain: return Binding(get: { self.comp1.gain }, set: { self.comp1.gain = $0 })
-        case .comp2Gate: return Binding(get: { self.comp2.gate }, set: { self.comp2.gate = $0 })
-        case .comp2Threshold: return Binding(get: { self.comp2.threshold }, set: { self.comp2.threshold = $0 })
-        case .comp2Ratio: return Binding(get: { self.comp2.ratio }, set: { self.comp2.ratio = $0 })
-        case .comp2Attack: return Binding(get: { self.comp2.attack }, set: { self.comp2.attack = $0 })
-        case .comp2Release: return Binding(get: { self.comp2.release }, set: { self.comp2.release = $0 })
-        case .comp2Gain: return Binding(get: { self.comp2.gain }, set: { self.comp2.gain = $0 })
+        case .comp1Gate: return Binding(get: { self.comp1.gate }, set: { self.setCompKnob(channel: 0, \.gate, $0) })
+        case .comp1Threshold: return Binding(get: { self.comp1.threshold }, set: { self.setCompKnob(channel: 0, \.threshold, $0) })
+        case .comp1Ratio: return Binding(get: { self.comp1.ratio }, set: { self.setCompKnob(channel: 0, \.ratio, $0) })
+        case .comp1Attack: return Binding(get: { self.comp1.attack }, set: { self.setCompKnob(channel: 0, \.attack, $0) })
+        case .comp1Release: return Binding(get: { self.comp1.release }, set: { self.setCompKnob(channel: 0, \.release, $0) })
+        case .comp1Gain: return Binding(get: { self.comp1.gain }, set: { self.setCompKnob(channel: 0, \.gain, $0) })
+        case .comp2Gate: return Binding(get: { self.comp2.gate }, set: { self.setCompKnob(channel: 1, \.gate, $0) })
+        case .comp2Threshold: return Binding(get: { self.comp2.threshold }, set: { self.setCompKnob(channel: 1, \.threshold, $0) })
+        case .comp2Ratio: return Binding(get: { self.comp2.ratio }, set: { self.setCompKnob(channel: 1, \.ratio, $0) })
+        case .comp2Attack: return Binding(get: { self.comp2.attack }, set: { self.setCompKnob(channel: 1, \.attack, $0) })
+        case .comp2Release: return Binding(get: { self.comp2.release }, set: { self.setCompKnob(channel: 1, \.release, $0) })
+        case .comp2Gain: return Binding(get: { self.comp2.gain }, set: { self.setCompKnob(channel: 1, \.gain, $0) })
         case .mixOutput: return Binding(get: { self.mixOutput }, set: { self.mixOutput = $0 })
         case .mixInput1: return Binding(get: { self.mixInput1 }, set: { self.mixInput1 = $0 })
         case .mixInput2: return Binding(get: { self.mixInput2 }, set: { self.mixInput2 = $0 })
@@ -416,7 +416,7 @@ enum PanelCanvas {
         button(&context, x, y + 18, 70, 32, "BYPASS", gray: !strip.bypass)
         text(&context, "GR", x + 78, y, 36, 14, 10, label, bold: true)
         meter(&context, x + 84, y + 16, 100, gr, peak: gr, showClip: false)
-        graph(&context, x + 186, y + 8, 104, 104)
+        graph(&context, x + 186, y + 8, 104, 104, gate: strip.gate)
         meter(&context, x + 368, y + 8, 116, out, peak: outPeak, showClip: true)
 
         let labels = ["GATE", "THRESHOLD", "RATIO", "ATTACK", "RELEASE", "GAIN"]
@@ -549,20 +549,28 @@ enum PanelCanvas {
 
     /// Visor do compressor. O quadrado é só a grade; a escala -60…0 fica
     /// fora dele, embaixo e à direita, como no painel da Roland.
+    /// O gate vai de -70 (-INF), na borda esquerda, até -20.
     private static func graph(
         _ context: inout GraphicsContext,
-        _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat
+        _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
+        gate: Double
     ) {
         let plot = min(w, h)
         let marks = ["-60", "-48", "-36", "-24", "-12", "0"]
         let steps = CGFloat(marks.count - 1)
 
+        let gateDb = -70.0 + min(1, max(0, gate)) * 50.0
+        let fraction = min(1, max(0, (gateDb + 60.0) / 60.0))
+        let gateX = x + CGFloat(fraction) * plot
+        let gateY = y + plot - CGFloat(fraction) * plot
+
         fill(&context, Path(CGRect(x: x, y: y, width: plot, height: plot)), Color(hex: 0xE39B45))
 
         var lower = Path()
-        lower.move(to: point(x, y + plot))
+        lower.move(to: point(gateX, gateY))
         lower.addLine(to: point(x + plot, y))
         lower.addLine(to: point(x + plot, y + plot))
+        lower.addLine(to: point(gateX, y + plot))
         lower.closeSubpath()
         context.fill(lower, with: .color(Color(hex: 0xC4621E)))
 
@@ -579,10 +587,12 @@ enum PanelCanvas {
                 bold: false, left: true)
         }
 
+        let curveColor = Color(hex: 0xFFF8EC)
         var curve = Path()
-        curve.move(to: point(x, y + plot))
+        curve.move(to: point(gateX, y + plot))
+        curve.addLine(to: point(gateX, gateY))
         curve.addLine(to: point(x + plot, y))
-        context.stroke(curve, with: .color(Color(hex: 0xFFF8EC)), lineWidth: 1.5)
+        context.stroke(curve, with: .color(curveColor), lineWidth: 1.5)
     }
 
     private static func lcd(_ context: inout GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ value: String) {

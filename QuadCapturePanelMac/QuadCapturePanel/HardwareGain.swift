@@ -14,6 +14,8 @@ struct PreampSwitches: Equatable {
     var bypass1: Bool?
     var bypass2: Bool?
     var link: Bool?
+    var gate1: Int?
+    var gate2: Int?
 }
 
 enum HardwareGain {
@@ -99,6 +101,8 @@ private final class SensFeed: @unchecked Sendable {
     /// A primeira resposta desta conexão, uma por canal. O eco seguinte não copia o outro canal.
     private var bypassSeen = [false, false]
     private var linkSeen = false
+    private var gate: [Int?] = [nil, nil]
+    private var gateSeen = [false, false]
     private var setupSeen = false
     private var buttonGen = 0
     private var collectGen = 0
@@ -171,6 +175,8 @@ private final class SensFeed: @unchecked Sendable {
         bypassSeen = [false, false]
         link = false
         linkSeen = false
+        gate = [nil, nil]
+        gateSeen = [false, false]
         setupSeen = false
         device = "off"
         buttonGen += 1
@@ -185,8 +191,10 @@ private final class SensFeed: @unchecked Sendable {
         phase = [nil, nil]
         bypass = [nil, nil]
         link = nil
+        gate = [nil, nil]
         bypassSeen = [false, false]
         linkSeen = false
+        gateSeen = [false, false]
         setupSeen = false
         collectGen += 1
         lock.unlock()
@@ -206,7 +214,8 @@ private final class SensFeed: @unchecked Sendable {
             loCut1: loCut[0], loCut2: loCut[1],
             phase1: phase[0], phase2: phase[1],
             bypass1: bypass[0], bypass2: bypass[1],
-            link: link)
+            link: link,
+            gate1: gate[0], gate2: gate[1])
     }
 
     private func openUserClient() -> Bool {
@@ -253,7 +262,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "show", "--last", "10m", "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
         ]
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -273,6 +282,7 @@ private final class SensFeed: @unchecked Sendable {
             _ = applyDevice(text)
             _ = applyBypassRead(text)
             _ = applyLinkRead(text)
+            _ = applyGateRead(text)
             _ = applySetup(text)
             if apply(text) {
                 applied += 1
@@ -306,6 +316,7 @@ private final class SensFeed: @unchecked Sendable {
             let setup = setupSeen
             let bypassOk = bypassSeen[0] && bypassSeen[1]
             let linkOk = linkSeen
+            let gateOk = gateSeen[0] && gateSeen[1]
             lock.unlock()
             if !setup {
                 PanelLog.write("state read missed")
@@ -313,6 +324,8 @@ private final class SensFeed: @unchecked Sendable {
                 PanelLog.write("bypass read missed")
             } else if !linkOk {
                 PanelLog.write("link read missed")
+            } else if !gateOk {
+                PanelLog.write("gate read missed")
             }
             return
         }
@@ -338,7 +351,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "show", "--start", start, "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
         ]
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -364,6 +377,10 @@ private final class SensFeed: @unchecked Sendable {
                 let shown = switches()
                 PanelLog.write("link read \(shown.link.map { $0 ? 1 : 0 } ?? -1)")
             }
+            if applyGateRead(text) {
+                let shown = switches()
+                PanelLog.write("gate read g1=\(shown.gate1 ?? -1) g2=\(shown.gate2 ?? -1)")
+            }
             if applySetup(text) {
                 found = true
             }
@@ -376,8 +393,9 @@ private final class SensFeed: @unchecked Sendable {
         lock.lock()
         let bypassOk = bypassSeen[0] && bypassSeen[1]
         let linkOk = linkSeen
+        let gateOk = gateSeen[0] && gateSeen[1]
         lock.unlock()
-        return found && bypassOk && linkOk
+        return found && bypassOk && linkOk && gateOk
     }
 
     private func startStream() {
@@ -391,7 +409,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "stream", "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
         ]
         let output = FileHandle(fileDescriptor: replica, closeOnDealloc: false)
         process.standardOutput = output
@@ -444,6 +462,10 @@ private final class SensFeed: @unchecked Sendable {
             if applyLinkRead(text) {
                 let shown = switches()
                 PanelLog.write("link read \(shown.link.map { $0 ? 1 : 0 } ?? -1)")
+            }
+            if applyGateRead(text) {
+                let shown = switches()
+                PanelLog.write("gate read g1=\(shown.gate1 ?? -1) g2=\(shown.gate2 ?? -1)")
             }
             if applySetup(text) {
                 let shown = switches()
@@ -570,6 +592,26 @@ private final class SensFeed: @unchecked Sendable {
         }
         linkSeen = true
         link = value == 1
+        buttonGen += 1
+        return true
+    }
+
+    /// A primeira resposta 00 05 <canal> 07 desta leitura. O canal 0 é o GATE da faixa 1.
+    /// O passo 0 é -INF e o 50 é -20 dB. Não devolve comando.
+    private func applyGateRead(_ message: String) -> Bool {
+        guard isCurrentRead(message) else { return false }
+        guard let marker = message.range(of: "[UA55] gate ") else { return false }
+        let parts = message[marker.upperBound...].split(whereSeparator: \.isWhitespace)
+        guard parts.count >= 2, let channel = Int(parts[0]), let step = Int(parts[1]), channel <= 1, step <= 50 else {
+            return false
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        if gateSeen[channel] {
+            return false
+        }
+        gateSeen[channel] = true
+        gate[channel] = step
         buttonGen += 1
         return true
     }

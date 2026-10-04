@@ -1280,6 +1280,10 @@ bool IsLoCutPacket(const uint8_t* bytes, uint32_t length)
         if (value > 108) {
             return false;
         }
+    } else if (parameter == 0x07) {
+        if (value > 50) {
+            return false;
+        }
     } else {
         return false;
     }
@@ -1378,6 +1382,39 @@ bool IsLinkReadPacket(const uint8_t* bytes, uint32_t length)
     return bytes[21] == sum;
 }
 
+bool IsGateReadPacket(const uint8_t* bytes, uint32_t length)
+{
+    if (bytes == nullptr || length != 24) {
+        return false;
+    }
+    if (bytes[0] != 0x14 || bytes[4] != 0x14 || bytes[8] != 0x14 || bytes[12] != 0x14
+        || bytes[16] != 0x14 || bytes[20] != 0x16) {
+        return false;
+    }
+    if (bytes[1] != 0xF0 || bytes[2] != 0x41 || bytes[3] != 0x10) {
+        return false;
+    }
+    if (bytes[5] != 0x00 || bytes[6] != 0x00 || bytes[7] != 0x56) {
+        return false;
+    }
+    if (bytes[9] != 0x11 || bytes[10] != 0x00 || bytes[11] != 0x05) {
+        return false;
+    }
+    const uint8_t channel = bytes[13];
+    if (channel > 1 || bytes[14] != 0x07 || bytes[15] != 0x00) {
+        return false;
+    }
+    if (bytes[17] != 0x00 || bytes[18] != 0x00 || bytes[19] != 0x01) {
+        return false;
+    }
+    if (bytes[22] != 0xF7 || bytes[23] != 0x00) {
+        return false;
+    }
+    const int total = 0x00 + 0x05 + (int)channel + 0x07 + 0x00 + 0x00 + 0x00 + 0x01;
+    const uint8_t sum = (uint8_t)((0 - total) & 0x7F);
+    return bytes[21] == sum;
+}
+
 } // namespace
 
 kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
@@ -1387,7 +1424,8 @@ kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
     const bool stateRequest = IsStateRequestPacket(bytes, length);
     const bool bypassRead = IsBypassReadPacket(bytes, length);
     const bool linkRead = IsLinkReadPacket(bytes, length);
-    if (!loCut && !autoSens && !stateRequest && !bypassRead && !linkRead) {
+    const bool gateRead = IsGateReadPacket(bytes, length);
+    if (!loCut && !autoSens && !stateRequest && !bypassRead && !linkRead && !gateRead) {
         return kIOReturnBadArgument;
     }
     if (midiOutPipe_ == nullptr) {
@@ -1424,6 +1462,9 @@ kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
     } else if (linkRead) {
         os_log(OS_LOG_DEFAULT, "[UA55] link rq1 status=0x%08x transferred=%u",
                (unsigned int)result, transferred);
+    } else if (gateRead) {
+        os_log(OS_LOG_DEFAULT, "[UA55] gate rq1 ch=%u status=0x%08x transferred=%u",
+               bytes[13], (unsigned int)result, transferred);
     } else if (autoSens) {
         os_log(OS_LOG_DEFAULT, "[UA55] autosens press status=0x%08x transferred=%u",
                (unsigned int)result, transferred);
@@ -1641,6 +1682,12 @@ void UA55UsbStream::HandleSysEx(const uint8_t* msg, uint32_t length)
     if (dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x05 && addr[2] == 0x00 && addr[3] == 0x05
         && (data == 0x00 || data == 0x01)) {
         os_log(OS_LOG_DEFAULT, "[UA55] link %u", data);
+        return;
+    }
+    // 00 05 <canal> 07 = GATE. O passo vai de 0 (-INF) a 50 (-20 dB).
+    if (dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x05 && addr[3] == 0x07 && addr[2] <= 1
+        && data <= 50) {
+        os_log(OS_LOG_DEFAULT, "[UA55] gate %u %u", addr[2], data);
         return;
     }
     // 00 05 <canal> 04 = SENS daquele preamp. O byte vai de 0 a 127
