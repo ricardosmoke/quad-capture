@@ -1260,27 +1260,53 @@ bool IsLoCutPacket(const uint8_t* bytes, uint32_t length)
     if (bytes[5] != 0x00 || bytes[6] != 0x00 || bytes[7] != 0x56) {
         return false;
     }
-    if (bytes[9] != 0x12 || bytes[10] != 0x00 || bytes[11] != 0x05 || bytes[14] != 0x01) {
+    if (bytes[9] != 0x12 || bytes[10] != 0x00 || bytes[11] != 0x05) {
         return false;
     }
     if (bytes[18] != 0xF7 || bytes[19] != 0x00) {
         return false;
     }
     const uint8_t channel = bytes[13];
+    const uint8_t parameter = bytes[14];
     const uint8_t value = bytes[15];
-    if (channel > 1 || value > 1) {
+    if (channel > 1) {
         return false;
     }
-    const int total = 0x00 + 0x05 + (int)channel + 0x01 + (int)value;
+    if (parameter == 0x01 || parameter == 0x02) {
+        if (value > 1) {
+            return false;
+        }
+    } else if (parameter == 0x04) {
+        if (value > 108) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+    const int total = 0x00 + 0x05 + (int)channel + (int)parameter + (int)value;
     const uint8_t sum = (uint8_t)((0 - total) & 0x7F);
     return bytes[17] == sum;
+}
+
+bool IsAutoSensPacket(const uint8_t* bytes, uint32_t length)
+{
+    static const uint8_t packet[20] = {
+        0x14, 0xF0, 0x41, 0x10,
+        0x14, 0x00, 0x00, 0x56,
+        0x14, 0x12, 0x00, 0x02,
+        0x14, 0x01, 0x02, 0x01,
+        0x16, 0x7A, 0xF7, 0x00
+    };
+    return bytes != nullptr && length == 20 && memcmp(bytes, packet, 20) == 0;
 }
 
 } // namespace
 
 kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
 {
-    if (!IsLoCutPacket(bytes, length)) {
+    const bool loCut = IsLoCutPacket(bytes, length);
+    const bool autoSens = IsAutoSensPacket(bytes, length);
+    if (!loCut && !autoSens) {
         return kIOReturnBadArgument;
     }
     if (midiOutPipe_ == nullptr) {
@@ -1308,8 +1334,13 @@ kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
     uint32_t transferred = 0;
     result = midiOutPipe_->IO(buffer, length, &transferred, 1000);
     OSSafeReleaseNULL(buffer);
-    os_log(OS_LOG_DEFAULT, "[UA55] lo-cut out ch=%u val=%u status=0x%08x transferred=%u",
-           bytes[13], bytes[15], (unsigned int)result, transferred);
+    if (autoSens) {
+        os_log(OS_LOG_DEFAULT, "[UA55] autosens press status=0x%08x transferred=%u",
+               (unsigned int)result, transferred);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[UA55] preamp out param=%u ch=%u val=%u status=0x%08x transferred=%u",
+               bytes[14], bytes[13], bytes[15], (unsigned int)result, transferred);
+    }
     if (result == kIOReturnSuccess && transferred != length) {
         return kIOReturnUnderrun;
     }

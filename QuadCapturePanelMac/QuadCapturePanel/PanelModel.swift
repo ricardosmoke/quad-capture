@@ -25,6 +25,8 @@ final class PanelModel: ObservableObject {
         var autoSensText: String = "—"
         var loCut1: Bool = false
         var loCut2: Bool = false
+        var phase1: Bool = false
+        var phase2: Bool = false
         var loCutStatus: String = ""
         var comp1 = CompStrip()
         var comp2 = CompStrip()
@@ -53,8 +55,17 @@ final class PanelModel: ObservableObject {
     @Published var autoSensText: String = "—"
     @Published var loCut1 = false
     @Published var loCut2 = false
+    @Published var phase1 = false
+    @Published var phase2 = false
     @Published var loCutStatus = ""
     private var loCutBusy = false
+    private var autoSensEpoch = 0
+    private var sensHold = [false, false]
+    private var sensQueuedStep = [-1, -1]
+    private var sensInFlight = [false, false]
+    private var sensEpoch = [0, 0]
+    private var sensBaseline = [-1, -1]
+    private var sensAccepted = [false, false]
     @Published var comp1 = CompStrip()
     @Published var comp2 = CompStrip()
     @Published var mixOutput: Double = 0.7
@@ -78,6 +89,8 @@ final class PanelModel: ObservableObject {
         s.autoSensText = autoSensText
         s.loCut1 = loCut1
         s.loCut2 = loCut2
+        s.phase1 = phase1
+        s.phase2 = phase2
         s.loCutStatus = loCutStatus
         s.comp1 = comp1
         s.comp2 = comp2
@@ -127,6 +140,115 @@ final class PanelModel: ObservableObject {
         }
     }
 
+    /// Canal 0 da tela é o SysEx canal 0; canal 1 da tela é o SysEx canal 1.
+    func togglePhase(channel: Int) {
+        guard channel == 0 || channel == 1, !loCutBusy else { return }
+        let turningOn = channel == 0 ? !phase1 : !phase2
+        loCutBusy = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendPhase(channel: UInt8(channel), on: turningOn)
+            Task { @MainActor in
+                guard let self else { return }
+                self.loCutBusy = false
+                if let error {
+                    self.loCutStatus = error
+                } else if channel == 0 {
+                    self.phase1 = turningOn
+                    self.loCutStatus = ""
+                } else {
+                    self.phase2 = turningOn
+                    self.loCutStatus = ""
+                }
+            }
+        }
+    }
+
+    /// Sempre envia o dado 01. A placa liga no primeiro clique e desliga no seguinte.
+    func pressAutoSens() {
+        guard !loCutBusy else { return }
+        loCutBusy = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendAutoSens()
+            Task { @MainActor in
+                guard let self else { return }
+                self.loCutBusy = false
+                if let error {
+                    self.loCutStatus = error
+                } else {
+                    self.autoSensEpoch += 1
+                    self.autoSensText = self.autoSensText == "on" ? "off" : "on"
+                    HardwareGain.rememberAutoSens(self.autoSensText)
+                    self.loCutStatus = ""
+                }
+            }
+        }
+    }
+
+    /// Arraste do knob. O passo é o dB mostrado vezes 2. A leitura da placa não passa por aqui.
+    func userSetSens(channel: Int, normalized: Double) {
+        guard channel == 0 || channel == 1 else { return }
+        let clamped = min(1, max(0, normalized))
+        let db = HardwareGain.db(fromNormalized: clamped)
+        let step = min(108, max(0, db * 2))
+        if sensQueuedStep[channel] == step {
+            if channel == 0 {
+                sens1 = clamped
+                sens1Known = true
+            } else {
+                sens2 = clamped
+                sens2Known = true
+            }
+            return
+        }
+        if !sensHold[channel] {
+            sensBaseline[channel] = displayedSensDb(channel)
+        }
+        sensEpoch[channel] += 1
+        sensAccepted[channel] = false
+        if channel == 0 {
+            sens1 = clamped
+            sens1Known = true
+        } else {
+            sens2 = clamped
+            sens2Known = true
+        }
+        sensQueuedStep[channel] = step
+        sensHold[channel] = true
+        pumpSens(channel)
+    }
+
+    private func displayedSensDb(_ channel: Int) -> Int {
+        if channel == 0 {
+            return sens1Known ? HardwareGain.db(fromNormalized: sens1) : -1
+        }
+        return sens2Known ? HardwareGain.db(fromNormalized: sens2) : -1
+    }
+
+    private func pumpSens(_ channel: Int) {
+        guard !sensInFlight[channel] else { return }
+        let step = sensQueuedStep[channel]
+        guard step >= 0 else { return }
+        sensInFlight[channel] = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendSens(channel: UInt8(channel), step: UInt8(step))
+            Task { @MainActor in
+                guard let self else { return }
+                self.sensInFlight[channel] = false
+                if let error {
+                    self.sensAccepted[channel] = false
+                    self.sensHold[channel] = true
+                    self.loCutStatus = error
+                } else if self.sensQueuedStep[channel] == step {
+                    self.sensAccepted[channel] = true
+                    self.loCutStatus = ""
+                }
+                if self.sensQueuedStep[channel] != step {
+                    self.pumpSens(channel)
+                }
+            }
+        }
+    }
+
     func start() {
         PanelLog.write("PanelModel.start")
         monitor.start()
@@ -137,14 +259,16 @@ final class PanelModel: ObservableObject {
                 self.levels = self.monitor.snapshot
                 guard !self.sensBusy else { return }
                 self.sensBusy = true
+                let epoch = self.autoSensEpoch
+                let sensEpoch = self.sensEpoch
                 PanelWork.queue.async { [weak self] in
                     let reading = PanelLog.measure("readSens") { HardwareGain.readSens() }
                     let device = HardwareGain.deviceText()
                     Task { @MainActor in
                         guard let self else { return }
                         self.sensBusy = false
-                        self.applyHardwareSens(reading)
-                        if device != self.autoSensText {
+                        self.applyHardwareSens(reading, sampledEpoch: sensEpoch)
+                        if self.autoSensEpoch == epoch, device != self.autoSensText {
                             self.autoSensText = device
                         }
                     }
@@ -160,14 +284,33 @@ final class PanelModel: ObservableObject {
         monitor.stop()
     }
 
-    private func applyHardwareSens(_ reading: (Int, Int)?) {
+    private func applyHardwareSens(_ reading: (Int, Int)?, sampledEpoch: [Int]) {
         guard let reading else { return }
-        if reading.0 <= Int(HardwareGain.sensMaxDb) {
-            sens1 = HardwareGain.normalized(fromDb: reading.0)
-            sens1Known = true
+        applyHardwareSensChannel(0, db: reading.0, sampledEpoch: sampledEpoch[0])
+        applyHardwareSensChannel(1, db: reading.1, sampledEpoch: sampledEpoch[1])
+    }
+
+    private func applyHardwareSensChannel(_ channel: Int, db: Int, sampledEpoch: Int) {
+        guard db <= Int(HardwareGain.sensMaxDb) else { return }
+        if sampledEpoch != sensEpoch[channel] {
+            return
         }
-        if reading.1 <= Int(HardwareGain.sensMaxDb) {
-            sens2 = HardwareGain.normalized(fromDb: reading.1)
+        let step = min(108, max(0, db * 2))
+        if sensHold[channel] {
+            if step == sensQueuedStep[channel] {
+                sensHold[channel] = false
+            } else if sensAccepted[channel], db != sensBaseline[channel] {
+                sensHold[channel] = false
+            } else {
+                return
+            }
+        }
+        let normalized = HardwareGain.normalized(fromDb: db)
+        if channel == 0 {
+            sens1 = normalized
+            sens1Known = true
+        } else {
+            sens2 = normalized
             sens2Known = true
         }
     }

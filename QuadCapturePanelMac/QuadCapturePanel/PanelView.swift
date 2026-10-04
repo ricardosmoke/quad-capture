@@ -44,6 +44,13 @@ struct PanelView: View {
                     LoCutButton(frame: layout.viewRect(for: PanelLayout.loCutHit(channel: channel))) {
                         model.toggleLoCut(channel: channel)
                     }
+                    PhaseButton(frame: layout.viewRect(for: PanelLayout.phaseHit(channel: channel))) {
+                        model.togglePhase(channel: channel)
+                    }
+                }
+
+                PhaseButton(frame: layout.viewRect(for: PanelLayout.autoSensHit), helpText: "Ligar ou desligar o AUTO-SENS") {
+                    model.pressAutoSens()
                 }
             }
         }
@@ -101,11 +108,30 @@ struct PanelLayout {
         return CGRect(x: channelX + 36, y: channelY + 8, width: 72, height: 30)
     }
 
+    /// PHASE dentro de `channel`: (x+36, y+44, 72, 26).
+    static func phaseHit(channel: Int) -> CGRect {
+        let channelX: CGFloat = 16
+        let channelY: CGFloat = channel == 0 ? 78 : 356
+        return CGRect(x: channelX + 36, y: channelY + 44, width: 72, height: 26)
+    }
+
+    /// AUTO SENS entre os dois canais: x+44, 72×40, centralizado no vão.
+    static let autoSensHit: CGRect = {
+        let x: CGFloat = 8 + 44
+        let channel1Y: CGFloat = 38 + 40
+        let channel2Y: CGFloat = 38 + 318
+        let gapTop = channel1Y + 182
+        let gapBottom = channel2Y + 4
+        let buttonH: CGFloat = 40
+        let y = gapTop + (gapBottom - gapTop - buttonH) / 2
+        return CGRect(x: x, y: y, width: 72, height: buttonH)
+    }()
+
     /// Posições dos knobs alinhadas ao Canvas.
     static let knobs: [KnobSpec] = [
-        // SENS vem do knob físico. Sem arraste: o painel só mostra a leitura.
-        KnobSpec(id: .sens1, cx: 8 + 72, cy: 38 + 40 + 124, radius: 22, interactive: false),
-        KnobSpec(id: .sens2, cx: 8 + 72, cy: 38 + 318 + 124, radius: 22, interactive: false),
+        // SENS acompanha o knob físico e também envia o passo quando o usuário arrasta.
+        KnobSpec(id: .sens1, cx: 8 + 72, cy: 38 + 40 + 124, radius: 22),
+        KnobSpec(id: .sens2, cx: 8 + 72, cy: 38 + 318 + 124, radius: 22),
         // COMP 1
         KnobSpec(id: .comp1Gate, cx: 220 + 58 + 0 * 62, cy: 78 + 180, radius: 18),
         KnobSpec(id: .comp1Threshold, cx: 220 + 58 + 1 * 62, cy: 78 + 180, radius: 18),
@@ -154,6 +180,21 @@ struct KnobHandle: View {
                     }
             )
             .help("Arraste para ajustar")
+    }
+}
+
+struct PhaseButton: View {
+    let frame: CGRect
+    var helpText: String = "Inverter a fase"
+    let action: () -> Void
+
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .frame(width: frame.width, height: frame.height)
+            .position(x: frame.midX, y: frame.midY)
+            .onTapGesture(perform: action)
+            .help(helpText)
     }
 }
 
@@ -222,8 +263,8 @@ struct SampleRateMenu: View {
 extension PanelModel {
     func binding(for id: KnobID) -> Binding<Double> {
         switch id {
-        case .sens1: return Binding(get: { self.sens1 }, set: { self.sens1 = $0 })
-        case .sens2: return Binding(get: { self.sens2 }, set: { self.sens2 = $0 })
+        case .sens1: return Binding(get: { self.sens1 }, set: { self.userSetSens(channel: 0, normalized: $0) })
+        case .sens2: return Binding(get: { self.sens2 }, set: { self.userSetSens(channel: 1, normalized: $0) })
         case .comp1Gate: return Binding(get: { self.comp1.gate }, set: { self.comp1.gate = $0 })
         case .comp1Threshold: return Binding(get: { self.comp1.threshold }, set: { self.comp1.threshold = $0 })
         case .comp1Ratio: return Binding(get: { self.comp1.ratio }, set: { self.comp1.ratio = $0 })
@@ -299,7 +340,7 @@ enum PanelCanvas {
         let channel2Y = y + 318
         channel(
             &context, x + 8, channel1Y, "1", state.sens1Text, PanelModel.knobAngle(state.sens1),
-            level: state.pre1, peak: state.pre1Peak, loCutOn: state.loCut1)
+            level: state.pre1, peak: state.pre1Peak, loCutOn: state.loCut1, phaseOn: state.phase1)
         let buttonW: CGFloat = 72
         let buttonH: CGFloat = 40
         let gapTop = channel1Y + 182
@@ -312,18 +353,18 @@ enum PanelCanvas {
             "AUTO SENS", gray: state.autoSensText != "on")
         channel(
             &context, x + 8, channel2Y, "2", state.sens2Text, PanelModel.knobAngle(state.sens2),
-            level: state.pre2, peak: state.pre2Peak, loCutOn: state.loCut2)
+            level: state.pre2, peak: state.pre2Peak, loCutOn: state.loCut2, phaseOn: state.phase2)
     }
 
     private static func channel(
         _ context: inout GraphicsContext,
         _ x: CGFloat, _ y: CGFloat,
         _ number: String, _ sens: String, _ sensAngle: CGFloat,
-        level: CGFloat, peak: CGFloat, loCutOn: Bool
+        level: CGFloat, peak: CGFloat, loCutOn: Bool, phaseOn: Bool
     ) {
         text(&context, number, x, y + 36, 28, 40, 28, ink, bold: true)
         button(&context, x + 36, y + 8, 72, 30, "LO-CUT", gray: !loCutOn)
-        button(&context, x + 36, y + 44, 72, 26, "PHASE", gray: false)
+        button(&context, x + 36, y + 44, 72, 26, "PHASE", gray: !phaseOn)
         meter(&context, x + 118, y + 4, 118, level, peak: peak, showClip: true)
         text(&context, "SENS", x + 36, y + 78, 72, 16, 10, label, bold: false)
         knob(&context, x + 72, y + 124, 22, sensAngle)

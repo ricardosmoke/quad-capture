@@ -33,6 +33,11 @@ enum HardwareGain {
         SensFeed.shared.deviceText()
     }
 
+    /// O clique da tela inverte o desenho. A leitura seguinte da placa pode corrigir.
+    static func rememberAutoSens(_ state: String) {
+        SensFeed.shared.remember(state)
+    }
+
     static func start() {
         SensFeed.shared.start()
     }
@@ -104,6 +109,12 @@ private final class SensFeed: @unchecked Sendable {
         let text = device
         lock.unlock()
         return text
+    }
+
+    func remember(_ state: String) {
+        lock.lock()
+        device = state
+        lock.unlock()
     }
 
     private func openUserClient() -> Bool {

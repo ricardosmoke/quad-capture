@@ -36,9 +36,91 @@ enum LoCutMIDI {
         return nil
     }
 
-    private static func logSend(channel: UInt8, on: Bool, dest: String, wrap: Bool, status: OSStatus, bytes: [UInt8]) {
+    /// Igual ao LO-CUT, com o parâmetro 02.
+    static func sendPhase(channel: UInt8, on: Bool) -> String? {
+        guard channel <= 1 else { return "Falha ao enviar PHASE" }
+        let sysex = phaseMessage(channel: channel, on: on)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logSend(channel: channel, on: on, dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes, label: "phase")
+            if status != noErr {
+                return "Falha ao enviar PHASE (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logSend(channel: channel, on: on, dest: "driver", wrap: true, status: status, bytes: packets, label: "phase")
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar PHASE (\(status))"
+        }
+        return nil
+    }
+
+    /// Pressionamento do AUTO-SENS. O dado é sempre 01; a placa liga e desliga sozinha.
+    static func sendAutoSens() -> String? {
+        let sysex = autoSensMessage()
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("autosens", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar AUTO-SENS (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("autosens", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar AUTO-SENS (\(status))"
+        }
+        return nil
+    }
+
+    /// SENS: canal 0 é o knob 1. `step` é o dB da tela vezes 2, de 0 a 108.
+    static func sendSens(channel: UInt8, step: UInt8) -> String? {
+        guard channel <= 1, step <= 108 else { return "Falha ao enviar SENS" }
+        let sysex = sensMessage(channel: channel, step: step)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("sens ch=\(channel) step=\(step)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar SENS (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("sens ch=\(channel) step=\(step)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar SENS (\(status))"
+        }
+        return nil
+    }
+
+    private static func logFixed(_ label: String, dest: String, wrap: Bool, status: OSStatus, bytes: [UInt8]) {
         let hex = bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
-        PanelLog.write("lo-cut ch=\(channel) on=\(on ? 1 : 0) dest=\(dest) wrap=\(wrap ? 1 : 0) status=\(status) \(hex)")
+        PanelLog.write("\(label) dest=\(dest) wrap=\(wrap ? 1 : 0) status=\(status) \(hex)")
+    }
+
+    private static func logSend(channel: UInt8, on: Bool, dest: String, wrap: Bool, status: OSStatus, bytes: [UInt8], label: String = "lo-cut") {
+        let hex = bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
+        PanelLog.write("\(label) ch=\(channel) on=\(on ? 1 : 0) dest=\(dest) wrap=\(wrap ? 1 : 0) status=\(status) \(hex)")
     }
 
     /// O CoreMIDI não publica a UA-55. O dext recebe estes bytes pela propriedade de áudio 'uLct'.
@@ -59,6 +141,25 @@ enum LoCutMIDI {
         let total = 0x00 + 0x05 + Int(channel) + 0x01 + Int(value)
         let sum = UInt8((0 - total) & 0x7F)
         return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x01, value, sum, 0xF7]
+    }
+
+    private static func phaseMessage(channel: UInt8, on: Bool) -> [UInt8] {
+        let value: UInt8 = on ? 0x01 : 0x00
+        let total = 0x00 + 0x05 + Int(channel) + 0x02 + Int(value)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x02, value, sum, 0xF7]
+    }
+
+    private static func autoSensMessage() -> [UInt8] {
+        let total = 0x00 + 0x02 + 0x01 + 0x02 + 0x01
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x02, 0x01, 0x02, 0x01, sum, 0xF7]
+    }
+
+    private static func sensMessage(channel: UInt8, step: UInt8) -> [UInt8] {
+        let total = 0x00 + 0x05 + Int(channel) + 0x04 + Int(step)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x04, step, sum, 0xF7]
     }
 
     /// Pacotes USB MIDI 1.0. Nibble alto = cabo. O fim de 2 bytes usa CIN 0x6.
