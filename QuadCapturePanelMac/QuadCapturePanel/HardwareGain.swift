@@ -72,6 +72,11 @@ enum HardwareGain {
         SensFeed.shared.collectState()
     }
 
+    /// A leitura da conexão, com o SysEx de cada BYPASS. O clique no botão não chama isto.
+    static func takeBypassReport() -> String? {
+        SensFeed.shared.takeBypassReport()
+    }
+
     static func start() {
         SensFeed.shared.start()
     }
@@ -100,6 +105,8 @@ private final class SensFeed: @unchecked Sendable {
     private var link: Bool?
     /// A primeira resposta desta conexão, uma por canal. O eco seguinte não copia o outro canal.
     private var bypassSeen = [false, false]
+    private var bypassSysex = ["", ""]
+    private var announceBypass = false
     private var linkSeen = false
     private var gate: [Int?] = [nil, nil]
     private var gateSeen = [false, false]
@@ -173,6 +180,8 @@ private final class SensFeed: @unchecked Sendable {
         phase = [false, false]
         bypass = [false, false]
         bypassSeen = [false, false]
+        bypassSysex = ["", ""]
+        announceBypass = true
         link = false
         linkSeen = false
         gate = [nil, nil]
@@ -190,6 +199,8 @@ private final class SensFeed: @unchecked Sendable {
         loCut = [nil, nil]
         phase = [nil, nil]
         bypass = [nil, nil]
+        bypassSysex = ["", ""]
+        announceBypass = false
         link = nil
         gate = [nil, nil]
         bypassSeen = [false, false]
@@ -566,6 +577,7 @@ private final class SensFeed: @unchecked Sendable {
             return false
         }
         let screen = channel == 0 ? 1 : 0
+        let sysex = parts.count >= 3 ? String(parts[2]).filter(\.isHexDigit) : ""
         lock.lock()
         defer { lock.unlock() }
         if bypassSeen[screen] {
@@ -573,8 +585,46 @@ private final class SensFeed: @unchecked Sendable {
         }
         bypassSeen[screen] = true
         bypass[screen] = value == 1
+        bypassSysex[screen] = sysex
         buttonGen += 1
         return true
+    }
+
+    /// Uma vez por conexão, depois que os dois BYPASS chegaram.
+    func takeBypassReport() -> String? {
+        lock.lock()
+        let ready = announceBypass && bypassSeen[0] && bypassSeen[1]
+        let on1 = bypass[0] == true
+        let on2 = bypass[1] == true
+        let sysex1 = bypassSysex[0]
+        let sysex2 = bypassSysex[1]
+        if ready {
+            announceBypass = false
+        }
+        lock.unlock()
+        guard ready else { return nil }
+        return """
+        BYPASS 1: \(on1 ? "ligado" : "desligado")
+        \(Self.spacedHex(sysex1))
+
+        BYPASS 2: \(on2 ? "ligado" : "desligado")
+        \(Self.spacedHex(sysex2))
+        """
+    }
+
+    private static func spacedHex(_ hex: String) -> String {
+        guard !hex.isEmpty else { return "o log não trouxe o SysEx" }
+        var text = ""
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex) ?? hex.endIndex
+            if !text.isEmpty {
+                text.append(" ")
+            }
+            text.append(contentsOf: hex[index..<next].uppercased())
+            index = next
+        }
+        return text
     }
 
     /// A primeira resposta 00 05 00 05 desta leitura. 01 liga o LINK.

@@ -191,6 +191,84 @@ enum LoCutMIDI {
         return nil
     }
 
+    /// ATTACK do compressor. Faixa 1 é o canal 0. O passo 0 é 0,2 ms e o 25 é 100 ms.
+    static func sendAttack(channel: UInt8, step: UInt8) -> String? {
+        guard channel <= 1, step <= 25 else { return "Falha ao enviar ATTACK" }
+        let sysex = attackMessage(channel: channel, step: step)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("attack ch=\(channel) step=\(step)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar ATTACK (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("attack ch=\(channel) step=\(step)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar ATTACK (\(status))"
+        }
+        return nil
+    }
+
+    /// RELEASE do compressor. Faixa 1 é o canal 0. O passo 0 é 10 ms e o 45 é 500 ms.
+    static func sendRelease(channel: UInt8, step: UInt8) -> String? {
+        guard channel <= 1, step <= 45 else { return "Falha ao enviar RELEASE" }
+        let sysex = releaseMessage(channel: channel, step: step)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("release ch=\(channel) step=\(step)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar RELEASE (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("release ch=\(channel) step=\(step)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar RELEASE (\(status))"
+        }
+        return nil
+    }
+
+    /// GAIN do compressor. Faixa 1 é o canal 0. O passo 0 é -50 dB, o 50 é 0 dB e o 74 é +24 dB.
+    static func sendGain(channel: UInt8, step: UInt8) -> String? {
+        guard channel <= 1, step <= 74 else { return "Falha ao enviar GAIN" }
+        let sysex = gainMessage(channel: channel, step: step)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("gain ch=\(channel) step=\(step)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar GAIN (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("gain ch=\(channel) step=\(step)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar GAIN (\(status))"
+        }
+        return nil
+    }
+
     /// Pressionamento do AUTO-SENS. O dado é sempre 01; a placa liga e desliga sozinha.
     static func sendAutoSens() -> String? {
         let sysex = autoSensMessage()
@@ -404,6 +482,24 @@ enum LoCutMIDI {
         let total = 0x00 + 0x05 + Int(channel) + 0x0B + Int(step)
         let sum = UInt8((0 - total) & 0x7F)
         return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x0B, step, sum, 0xF7]
+    }
+
+    private static func attackMessage(channel: UInt8, step: UInt8) -> [UInt8] {
+        let total = 0x00 + 0x05 + Int(channel) + 0x08 + Int(step)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x08, step, sum, 0xF7]
+    }
+
+    private static func releaseMessage(channel: UInt8, step: UInt8) -> [UInt8] {
+        let total = 0x00 + 0x05 + Int(channel) + 0x09 + Int(step)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x09, step, sum, 0xF7]
+    }
+
+    private static func gainMessage(channel: UInt8, step: UInt8) -> [UInt8] {
+        let total = 0x00 + 0x05 + Int(channel) + 0x0C + Int(step)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x0C, step, sum, 0xF7]
     }
 
     private static func bypassMessage(channel: UInt8, on: Bool) -> [UInt8] {

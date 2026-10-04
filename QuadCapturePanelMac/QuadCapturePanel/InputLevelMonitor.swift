@@ -184,6 +184,7 @@ final class InputLevelMonitor: ObservableObject {
         var levels: [CGFloat] = Array(repeating: 0, count: 6)
         var peaks: [CGFloat] = Array(repeating: 0, count: 6)
         var connected: Bool = false
+        var settled: Bool = false
         var status: String = "Procurando QUAD-CAPTURE…"
         var sampleRateHz: Double = 0
 
@@ -201,6 +202,8 @@ final class InputLevelMonitor: ObservableObject {
     private var hold = [Float](repeating: 0, count: LevelCaptureEngine.maxChannels)
     private var running = false
     private var openInFlight = false
+    private var watchInFlight = false
+    private var openedDeviceID: AudioDeviceID = 0
 
     func start() {
         guard !running else { return }
@@ -209,10 +212,9 @@ final class InputLevelMonitor: ObservableObject {
         uiTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
-        scanTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        scanTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.ensureRunning()
-                self?.refreshSampleRate()
+                self?.watchBoard()
             }
         }
     }
@@ -249,7 +251,52 @@ final class InputLevelMonitor: ObservableObject {
         PanelWork.queue.async {
             PanelLog.measure("engine.stop [panel]") { engine.stop() }
         }
+        openedDeviceID = 0
         snapshot = Snapshot(status: "Parado")
+    }
+
+    /// Enquanto a captura está aberta, só a queda desse aparelho derruba o painel.
+    /// Procurar de novo a lista do HAL, com o stream aberto, falha e reiniciava a placa.
+    private func watchBoard() {
+        guard running, !openInFlight, !watchInFlight else { return }
+        let deviceID = openedDeviceID
+        if deviceID == 0 {
+            ensureRunning()
+            return
+        }
+        watchInFlight = true
+        let engine = engine
+        PanelWork.queue.async {
+            let alive = UA55Device.isAlive(deviceID)
+            if !alive, engine.audioUnit != nil {
+                PanelLog.measure("engine.stop [unplug]") { engine.stop() }
+            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.watchInFlight = false
+                guard self.running, !self.openInFlight else { return }
+                if alive {
+                    self.refreshSampleRate()
+                    return
+                }
+                self.openedDeviceID = 0
+                self.markDisconnected()
+            }
+        }
+    }
+
+    private func markDisconnected() {
+        hold = [Float](repeating: 0, count: LevelCaptureEngine.maxChannels)
+        var next = snapshot
+        next.connected = false
+        next.settled = true
+        next.status = "Placa desconectada"
+        next.sampleRateHz = 0
+        next.levels = Array(repeating: 0, count: LevelCaptureEngine.maxChannels)
+        next.peaks = Array(repeating: 0, count: LevelCaptureEngine.maxChannels)
+        if next != snapshot {
+            snapshot = next
+        }
     }
 
     private func ensureRunning() {
@@ -275,19 +322,27 @@ final class InputLevelMonitor: ObservableObject {
     }
 
     private func apply(_ result: OpenResult) {
+        openedDeviceID = result.connected ? result.deviceID : 0
         snapshot.connected = result.connected
+        snapshot.settled = true
         snapshot.status = result.status
         snapshot.sampleRateHz = result.sampleRateHz
+        if !result.connected {
+            hold = [Float](repeating: 0, count: LevelCaptureEngine.maxChannels)
+            snapshot.levels = Array(repeating: 0, count: LevelCaptureEngine.maxChannels)
+            snapshot.peaks = Array(repeating: 0, count: LevelCaptureEngine.maxChannels)
+        }
     }
 
     /// Acompanha uma troca feita fora do painel (Audio MIDI Setup) e reabre
     /// a captura quando o número de canais muda, como em 192 kHz.
     private func refreshSampleRate() {
-        guard running, !openInFlight else { return }
+        guard running, !openInFlight, openedDeviceID != 0 else { return }
         let known = snapshot.sampleRateHz
+        let id = openedDeviceID
         let engine = engine
         PanelWork.queue.async {
-            guard let id = UA55Device.find() else { return }
+            guard UA55Device.isAlive(id) else { return }
             let hz = UA55Device.nominalRate(id) ?? 0
             let changed = known > 0 && UA55Device.bucket(hz) != UA55Device.bucket(known)
             var reopened: OpenResult?
@@ -311,6 +366,7 @@ final class InputLevelMonitor: ObservableObject {
         var connected: Bool
         var status: String
         var sampleRateHz: Double
+        var deviceID: AudioDeviceID = 0
     }
 
     /// Erros Swift ficam no log e viram um estado de falha. O processo continua.
@@ -357,7 +413,7 @@ final class InputLevelMonitor: ObservableObject {
             }
             let name = UA55Device.name(id) ?? "UA-55"
             PanelLog.write("input open ok \(name) \(Int(hz)) Hz")
-            return OpenResult(connected: true, status: "Entrada ao vivo · \(name)", sampleRateHz: hz)
+            return OpenResult(connected: true, status: "Entrada ao vivo · \(name)", sampleRateHz: hz, deviceID: id)
         } catch {
             PanelLog.write("input open failed \(error.localizedDescription)")
             return OpenResult(
@@ -416,6 +472,17 @@ enum UA55Device {
             }
         }
         return nil
+    }
+
+    static func isAlive(_ device: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var alive: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &alive)
+        return status == noErr && alive != 0
     }
 
     static func name(_ device: AudioDeviceID) -> String? {

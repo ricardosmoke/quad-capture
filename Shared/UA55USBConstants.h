@@ -10,7 +10,7 @@ static const uint16_t kUA55ProductID = 0x012F;
 
 // Deve coincidir com CURRENT_PROJECT_VERSION no Xcode (log ao plugar).
 #ifndef UA55_DRIVER_BUILD
-#define UA55_DRIVER_BUILD 70
+#define UA55_DRIVER_BUILD 72
 #endif
 static const uint32_t kUA55DriverBuild = UA55_DRIVER_BUILD;
 

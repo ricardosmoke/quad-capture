@@ -65,6 +65,16 @@ struct PanelView: View {
                         model.toggleBypass(channel: channel)
                     }
                 }
+
+                if model.levels.settled && !state.connected {
+                    DisconnectedCover()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                }
+            }
+        }
+        .onChange(of: state.connected) { connected in
+            if !connected {
+                rateMenuOpen = false
             }
         }
         .onAppear {
@@ -76,6 +86,18 @@ struct PanelView: View {
         .onDisappear {
             PanelLog.write("window disappear")
             model.stop()
+        }
+        .alert("BYPASS da placa", isPresented: Binding(
+            get: { model.bypassReport != nil },
+            set: { shown in
+                if !shown {
+                    model.bypassReport = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.bypassReport ?? "")
         }
     }
 }
@@ -245,6 +267,27 @@ struct SampleRateButton: View {
             .position(x: frame.midX, y: frame.midY)
             .onTapGesture(perform: action)
             .help("Escolher sample rate")
+    }
+}
+
+private struct DisconnectedCover: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.72)
+            Text("A placa está desconectada")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(PanelCanvas.ink)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 18)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(PanelCanvas.metal)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color(hex: 0x1A1A1A), lineWidth: 2)))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
     }
 }
 
@@ -419,7 +462,7 @@ enum PanelCanvas {
         graph(
             &context, x + 186, y + 8, 104, 104,
             gate: strip.gate, threshold: strip.threshold, ratio: strip.ratio,
-            bypassed: strip.bypass)
+            gain: strip.gain, bypassed: strip.bypass)
         meter(&context, x + 368, y + 8, 116, out, peak: outPeak, showClip: true)
 
         let labels = ["GATE", "THRESHOLD", "RATIO", "ATTACK", "RELEASE", "GAIN"]
@@ -552,11 +595,11 @@ enum PanelCanvas {
 
     /// Visor do compressor. O quadrado é só a grade; a escala -60…0 fica
     /// fora dele, embaixo e à direita, como no painel da Roland.
-    /// A curva usa o GATE, o THRESHOLD e o RATIO desta faixa.
+    /// A curva usa o GATE, o THRESHOLD, o RATIO e o GAIN desta faixa.
     private static func graph(
         _ context: inout GraphicsContext,
         _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
-        gate: Double, threshold: Double, ratio: Double, bypassed: Bool
+        gate: Double, threshold: Double, ratio: Double, gain: Double, bypassed: Bool
     ) {
         let plot = min(w, h)
         let marks = ["-60", "-48", "-36", "-24", "-12", "0"]
@@ -568,15 +611,17 @@ enum PanelCanvas {
         let thresholdDb = Double(thresholdStep) - 50
         let ratioStep = min(8, max(0, Int((min(1, max(0, ratio)) * 8).rounded())))
         let ratioDivisor = [1.0, 1.2, 1.5, 2.0, 2.8, 4.0, 8.0, 16.0, 0][ratioStep]
+        let gainStep = min(74, max(0, Int((min(1, max(0, gain)) * 74).rounded())))
+        let gainDb = Double(gainStep) - 50
 
         func outputDb(_ input: Double) -> Double {
             if input <= thresholdDb {
-                return input
+                return input + gainDb
             }
             if ratioDivisor == 0 {
-                return thresholdDb
+                return thresholdDb + gainDb
             }
-            return thresholdDb + (input - thresholdDb) / ratioDivisor
+            return thresholdDb + (input - thresholdDb) / ratioDivisor + gainDb
         }
 
         func plotX(_ db: Double) -> CGFloat {
@@ -594,17 +639,18 @@ enum PanelCanvas {
             samples.append((gateDb, -60))
             samples.append((gateDb, outputDb(gateDb)))
             if gateDb < thresholdDb {
-                samples.append((thresholdDb, thresholdDb))
+                samples.append((thresholdDb, outputDb(thresholdDb)))
             }
         } else {
             samples.append((-60, outputDb(-60)))
             if thresholdDb > -60 {
-                samples.append((thresholdDb, thresholdDb))
+                samples.append((thresholdDb, outputDb(thresholdDb)))
             }
         }
         if samples.last?.0 != 0 {
             samples.append((0, outputDb(0)))
         }
+        samples = pinnedToGraph(samples)
 
         let field = Color(hex: bypassed ? 0x8C8882 : 0xE39B45)
         let under = Color(hex: bypassed ? 0x5C5854 : 0xC4621E)
@@ -642,6 +688,26 @@ enum PanelCanvas {
             curve.addLine(to: point(plotX(sample.0), plotY(sample.1)))
         }
         context.stroke(curve, with: .color(curveColor), lineWidth: 1.5)
+    }
+
+    /// Mantém no quadrado o trecho em que a saída sai de -60…0 dB.
+    private static func pinnedToGraph(_ raw: [(Double, Double)]) -> [(Double, Double)] {
+        guard var previous = raw.first else { return [] }
+        var pinned = [previous]
+        for sample in raw.dropFirst() {
+            let edges: [Double] = previous.1 <= sample.1 ? [-60, 0] : [0, -60]
+            for edge in edges {
+                let from = previous.1 - edge
+                let to = sample.1 - edge
+                if from * to < 0 {
+                    let t = (edge - previous.1) / (sample.1 - previous.1)
+                    pinned.append((previous.0 + t * (sample.0 - previous.0), edge))
+                }
+            }
+            pinned.append(sample)
+            previous = sample
+        }
+        return pinned
     }
 
     private static func lcd(_ context: inout GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ value: String) {

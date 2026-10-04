@@ -1292,6 +1292,18 @@ bool IsLoCutPacket(const uint8_t* bytes, uint32_t length)
         if (value > 8) {
             return false;
         }
+    } else if (parameter == 0x08) {
+        if (value > 25) {
+            return false;
+        }
+    } else if (parameter == 0x09) {
+        if (value > 45) {
+            return false;
+        }
+    } else if (parameter == 0x0C) {
+        if (value > 74) {
+            return false;
+        }
     } else {
         return false;
     }
@@ -1683,7 +1695,18 @@ void UA55UsbStream::HandleSysEx(const uint8_t* msg, uint32_t length)
     // esconderia a leitura seguinte, então cada resposta é registrada.
     if (dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x05 && addr[3] == 0x06 && addr[2] <= 1
         && (data == 0x00 || data == 0x01)) {
-        os_log(OS_LOG_DEFAULT, "[UA55] bypass %u %u", addr[2], data);
+        char hex[129];
+        uint32_t used = 0;
+        const uint32_t count = length > 64 ? 64 : length;
+        for (uint32_t index = 0; index < count && used + 3 < sizeof(hex); index++) {
+            const int wrote = snprintf(hex + used, sizeof(hex) - used, "%02x", msg[index]);
+            if (wrote < 0) {
+                break;
+            }
+            used += (uint32_t)wrote;
+        }
+        hex[used] = 0;
+        os_log(OS_LOG_DEFAULT, "[UA55] bypass %u %u %{public}s", addr[2], data, hex);
         return;
     }
     // 00 05 00 05 = LINK. Cada resposta é registrada, senão a leitura seguinte some.

@@ -60,6 +60,7 @@ final class PanelModel: ObservableObject {
     @Published var phase2 = false
     @Published var loCutStatus = ""
     @Published var linkOn = false
+    @Published var bypassReport: String?
     private var loCutBusy = false
     private var autoSensEpoch = 0
     private var sensHold = [false, false]
@@ -74,6 +75,12 @@ final class PanelModel: ObservableObject {
     private var thresholdInFlight = [false, false]
     private var ratioQueuedStep = [-1, -1]
     private var ratioInFlight = [false, false]
+    private var attackQueuedStep = [-1, -1]
+    private var attackInFlight = [false, false]
+    private var releaseQueuedStep = [-1, -1]
+    private var releaseInFlight = [false, false]
+    private var gainQueuedStep = [-1, -1]
+    private var gainInFlight = [false, false]
     private var sawConnected = false
     private var stateRequested = false
     private var switchGen = 0
@@ -170,19 +177,13 @@ final class PanelModel: ObservableObject {
     }
 
     /// Faixa 1 da tela é o canal 1 da placa. 01 é bypass; 00 deixa o compressor ativo.
-    /// Com o LINK ligado, o clique na faixa 1 também clica a faixa 2 antes da leitura.
     func toggleBypass(channel: Int) {
         guard channel == 0 || channel == 1, !loCutBusy else { return }
         let turningOn = channel == 0 ? !comp1.bypass : !comp2.bypass
         let deviceChannel: UInt8 = channel == 0 ? 1 : 0
-        let alsoBypass2 = channel == 0 && linkOn
-        let bypass2On = !comp2.bypass
         loCutBusy = true
         PanelWork.queue.async { [weak self] in
             let error = LoCutMIDI.sendBypass(channel: deviceChannel, on: turningOn)
-            let followError: String? = (error == nil && alsoBypass2)
-                ? LoCutMIDI.sendBypass(channel: 0, on: bypass2On)
-                : nil
             Task { @MainActor in
                 guard let self else { return }
                 if let error {
@@ -195,14 +196,6 @@ final class PanelModel: ObservableObject {
                 } else {
                     self.comp2.bypass = turningOn
                 }
-                if let followError {
-                    self.loCutBusy = false
-                    self.loCutStatus = followError
-                    return
-                }
-                if alsoBypass2 {
-                    self.comp2.bypass = bypass2On
-                }
                 self.loCutStatus = ""
                 self.loCutBusy = false
                 self.refreshButtonsFromBoard()
@@ -210,34 +203,15 @@ final class PanelModel: ObservableObject {
         }
     }
 
-    /// Um único LINK. 01 liga as duas faixas do compressor.
-    /// A placa, ao ligar o LINK, copia o canal 0 para o canal 1. O canal 0 é o BYPASS 2
-    /// da tela, então o BYPASS 2 viraria mestre. O BYPASS 1 é o mestre: o 2 recebe o valor
-    /// dele antes do LINK, e a leitura só sai depois dos dois envios.
+    /// Um único LINK. O clique só envia o próprio parâmetro.
     func toggleLink() {
         guard !loCutBusy else { return }
         let turningOn = !linkOn
-        let masterOn = comp1.bypass
         loCutBusy = true
         PanelWork.queue.async { [weak self] in
-            let followError: String? = turningOn ? LoCutMIDI.sendBypass(channel: 0, on: masterOn) : nil
-            let error = followError == nil ? LoCutMIDI.sendLink(on: turningOn) : nil
+            let error = LoCutMIDI.sendLink(on: turningOn)
             Task { @MainActor in
                 guard let self else { return }
-                if let followError {
-                    self.loCutBusy = false
-                    self.loCutStatus = followError
-                    return
-                }
-                if turningOn {
-                    self.comp2.bypass = masterOn
-                    self.comp2.gate = self.comp1.gate
-                    self.comp2.threshold = self.comp1.threshold
-                    self.comp2.ratio = self.comp1.ratio
-                    self.comp2.attack = self.comp1.attack
-                    self.comp2.release = self.comp1.release
-                    self.comp2.gain = self.comp1.gain
-                }
                 if let error {
                     self.loCutBusy = false
                     self.loCutStatus = error
@@ -445,6 +419,9 @@ final class PanelModel: ObservableObject {
 
     /// O DT1 de 59 bytes só escreve o desenho. Não passa pelos envios.
     private func applySetupSwitches() {
+        if let report = HardwareGain.takeBypassReport() {
+            bypassReport = report
+        }
         let shown = HardwareGain.preampSwitches()
         guard shown.generation != switchGen, !loCutBusy else { return }
         switchGen = shown.generation
@@ -523,6 +500,21 @@ final class PanelModel: ObservableObject {
             if write2 { queueRatio(channel: 1, normalized: clamped) }
             return
         }
+        if key == \.attack {
+            if write1 { queueAttack(channel: 0, normalized: clamped) }
+            if write2 { queueAttack(channel: 1, normalized: clamped) }
+            return
+        }
+        if key == \.release {
+            if write1 { queueRelease(channel: 0, normalized: clamped) }
+            if write2 { queueRelease(channel: 1, normalized: clamped) }
+            return
+        }
+        if key == \.gain {
+            if write1 { queueGain(channel: 0, normalized: clamped) }
+            if write2 { queueGain(channel: 1, normalized: clamped) }
+            return
+        }
         if write1 { comp1[keyPath: key] = clamped }
         if write2 { comp2[keyPath: key] = clamped }
     }
@@ -592,6 +584,111 @@ final class PanelModel: ObservableObject {
                 }
                 if self.ratioQueuedStep[channel] != step {
                     self.pumpRatio(channel)
+                }
+            }
+        }
+    }
+
+    /// Faixa 1 envia o canal 0. O passo 0 é 0,2 ms; 25 é 100 ms.
+    private func queueAttack(channel: Int, normalized: Double) {
+        let step = min(25, max(0, Int((normalized * 25).rounded())))
+        if channel == 0 {
+            comp1.attack = normalized
+        } else {
+            comp2.attack = normalized
+        }
+        guard attackQueuedStep[channel] != step else { return }
+        attackQueuedStep[channel] = step
+        pumpAttack(channel)
+    }
+
+    private func pumpAttack(_ channel: Int) {
+        guard !attackInFlight[channel] else { return }
+        let step = attackQueuedStep[channel]
+        guard step >= 0 else { return }
+        attackInFlight[channel] = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendAttack(channel: UInt8(channel), step: UInt8(step))
+            Task { @MainActor in
+                guard let self else { return }
+                self.attackInFlight[channel] = false
+                if let error {
+                    self.loCutStatus = error
+                } else if self.attackQueuedStep[channel] == step {
+                    self.loCutStatus = ""
+                }
+                if self.attackQueuedStep[channel] != step {
+                    self.pumpAttack(channel)
+                }
+            }
+        }
+    }
+
+    /// Faixa 1 envia o canal 0. O passo 0 é 10 ms; 45 é 500 ms.
+    private func queueRelease(channel: Int, normalized: Double) {
+        let step = min(45, max(0, Int((normalized * 45).rounded())))
+        if channel == 0 {
+            comp1.release = normalized
+        } else {
+            comp2.release = normalized
+        }
+        guard releaseQueuedStep[channel] != step else { return }
+        releaseQueuedStep[channel] = step
+        pumpRelease(channel)
+    }
+
+    private func pumpRelease(_ channel: Int) {
+        guard !releaseInFlight[channel] else { return }
+        let step = releaseQueuedStep[channel]
+        guard step >= 0 else { return }
+        releaseInFlight[channel] = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendRelease(channel: UInt8(channel), step: UInt8(step))
+            Task { @MainActor in
+                guard let self else { return }
+                self.releaseInFlight[channel] = false
+                if let error {
+                    self.loCutStatus = error
+                } else if self.releaseQueuedStep[channel] == step {
+                    self.loCutStatus = ""
+                }
+                if self.releaseQueuedStep[channel] != step {
+                    self.pumpRelease(channel)
+                }
+            }
+        }
+    }
+
+    /// Faixa 1 envia o canal 0. O passo 0 é -50 dB; 50 é 0 dB; 74 é +24 dB.
+    private func queueGain(channel: Int, normalized: Double) {
+        let step = min(74, max(0, Int((normalized * 74).rounded())))
+        if channel == 0 {
+            comp1.gain = normalized
+        } else {
+            comp2.gain = normalized
+        }
+        guard gainQueuedStep[channel] != step else { return }
+        gainQueuedStep[channel] = step
+        pumpGain(channel)
+    }
+
+    private func pumpGain(_ channel: Int) {
+        guard !gainInFlight[channel] else { return }
+        let step = gainQueuedStep[channel]
+        guard step >= 0 else { return }
+        gainInFlight[channel] = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendGain(channel: UInt8(channel), step: UInt8(step))
+            Task { @MainActor in
+                guard let self else { return }
+                self.gainInFlight[channel] = false
+                if let error {
+                    self.loCutStatus = error
+                } else if self.gainQueuedStep[channel] == step {
+                    self.loCutStatus = ""
+                }
+                if self.gainQueuedStep[channel] != step {
+                    self.pumpGain(channel)
                 }
             }
         }
