@@ -70,6 +70,10 @@ final class PanelModel: ObservableObject {
     private var sensAccepted = [false, false]
     private var gateQueuedStep = [-1, -1]
     private var gateInFlight = [false, false]
+    private var thresholdQueuedStep = [-1, -1]
+    private var thresholdInFlight = [false, false]
+    private var ratioQueuedStep = [-1, -1]
+    private var ratioInFlight = [false, false]
     private var sawConnected = false
     private var stateRequested = false
     private var switchGen = 0
@@ -509,8 +513,88 @@ final class PanelModel: ObservableObject {
             if write2 { queueGate(channel: 1, normalized: clamped) }
             return
         }
+        if key == \.threshold {
+            if write1 { queueThreshold(channel: 0, normalized: clamped) }
+            if write2 { queueThreshold(channel: 1, normalized: clamped) }
+            return
+        }
+        if key == \.ratio {
+            if write1 { queueRatio(channel: 0, normalized: clamped) }
+            if write2 { queueRatio(channel: 1, normalized: clamped) }
+            return
+        }
         if write1 { comp1[keyPath: key] = clamped }
         if write2 { comp2[keyPath: key] = clamped }
+    }
+
+    /// Faixa 1 envia o canal 0. O passo 0 é -50 dB; 50 é 0 dB.
+    private func queueThreshold(channel: Int, normalized: Double) {
+        let step = min(50, max(0, Int((normalized * 50).rounded())))
+        if channel == 0 {
+            comp1.threshold = normalized
+        } else {
+            comp2.threshold = normalized
+        }
+        guard thresholdQueuedStep[channel] != step else { return }
+        thresholdQueuedStep[channel] = step
+        pumpThreshold(channel)
+    }
+
+    private func pumpThreshold(_ channel: Int) {
+        guard !thresholdInFlight[channel] else { return }
+        let step = thresholdQueuedStep[channel]
+        guard step >= 0 else { return }
+        thresholdInFlight[channel] = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendThreshold(channel: UInt8(channel), step: UInt8(step))
+            Task { @MainActor in
+                guard let self else { return }
+                self.thresholdInFlight[channel] = false
+                if let error {
+                    self.loCutStatus = error
+                } else if self.thresholdQueuedStep[channel] == step {
+                    self.loCutStatus = ""
+                }
+                if self.thresholdQueuedStep[channel] != step {
+                    self.pumpThreshold(channel)
+                }
+            }
+        }
+    }
+
+    /// Faixa 1 envia o canal 0. O passo 0 é 1:1.0; 8 é 1:INF.
+    private func queueRatio(channel: Int, normalized: Double) {
+        let step = min(8, max(0, Int((normalized * 8).rounded())))
+        if channel == 0 {
+            comp1.ratio = normalized
+        } else {
+            comp2.ratio = normalized
+        }
+        guard ratioQueuedStep[channel] != step else { return }
+        ratioQueuedStep[channel] = step
+        pumpRatio(channel)
+    }
+
+    private func pumpRatio(_ channel: Int) {
+        guard !ratioInFlight[channel] else { return }
+        let step = ratioQueuedStep[channel]
+        guard step >= 0 else { return }
+        ratioInFlight[channel] = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendRatio(channel: UInt8(channel), step: UInt8(step))
+            Task { @MainActor in
+                guard let self else { return }
+                self.ratioInFlight[channel] = false
+                if let error {
+                    self.loCutStatus = error
+                } else if self.ratioQueuedStep[channel] == step {
+                    self.loCutStatus = ""
+                }
+                if self.ratioQueuedStep[channel] != step {
+                    self.pumpRatio(channel)
+                }
+            }
+        }
     }
 
     /// Faixa 1 envia o canal 0. O passo 0 é -INF; 50 é -20 dB.

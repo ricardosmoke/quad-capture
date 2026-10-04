@@ -139,6 +139,58 @@ enum LoCutMIDI {
         return nil
     }
 
+    /// THRESHOLD do compressor. Faixa 1 é o canal 0. O passo 0 é -50 dB e o 50 é 0 dB.
+    static func sendThreshold(channel: UInt8, step: UInt8) -> String? {
+        guard channel <= 1, step <= 50 else { return "Falha ao enviar THRESHOLD" }
+        let sysex = thresholdMessage(channel: channel, step: step)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("threshold ch=\(channel) step=\(step)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar THRESHOLD (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("threshold ch=\(channel) step=\(step)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar THRESHOLD (\(status))"
+        }
+        return nil
+    }
+
+    /// RATIO do compressor. Faixa 1 é o canal 0. O passo 0 é 1:1.0 e o 8 é 1:INF.
+    static func sendRatio(channel: UInt8, step: UInt8) -> String? {
+        guard channel <= 1, step <= 8 else { return "Falha ao enviar RATIO" }
+        let sysex = ratioMessage(channel: channel, step: step)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("ratio ch=\(channel) step=\(step)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar RATIO (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("ratio ch=\(channel) step=\(step)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar RATIO (\(status))"
+        }
+        return nil
+    }
+
     /// Pressionamento do AUTO-SENS. O dado é sempre 01; a placa liga e desliga sozinha.
     static func sendAutoSens() -> String? {
         let sysex = autoSensMessage()
@@ -340,6 +392,18 @@ enum LoCutMIDI {
         let total = 0x00 + 0x05 + Int(channel) + 0x07 + Int(step)
         let sum = UInt8((0 - total) & 0x7F)
         return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x07, step, sum, 0xF7]
+    }
+
+    private static func thresholdMessage(channel: UInt8, step: UInt8) -> [UInt8] {
+        let total = 0x00 + 0x05 + Int(channel) + 0x0A + Int(step)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x0A, step, sum, 0xF7]
+    }
+
+    private static func ratioMessage(channel: UInt8, step: UInt8) -> [UInt8] {
+        let total = 0x00 + 0x05 + Int(channel) + 0x0B + Int(step)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x0B, step, sum, 0xF7]
     }
 
     private static func bypassMessage(channel: UInt8, on: Bool) -> [UInt8] {

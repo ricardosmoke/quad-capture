@@ -52,7 +52,7 @@ public:
     // Chamado no fio USB quando chega DT1 de SENS.
     void SetSensListener(void* context, void (*listener)(void* context, uint8_t channel, uint8_t db));
     // Pacote USB MIDI no cabo 1.
-    // LO-CUT é o parâmetro 01, PHASE é o 02, LINK é o 05, BYPASS é o 06, GATE é o 07. AUTO-SENS é o pacote fixo 00 02 01 02 / 01.
+    // LO-CUT é o parâmetro 01, PHASE é o 02, LINK é o 05, BYPASS é o 06, GATE é o 07, THRESHOLD é o 0A, RATIO é o 0B. AUTO-SENS é o pacote fixo 00 02 01 02 / 01.
     // O RQ1 de estado tem 24 bytes: endereço 01 00 00 00, tamanho 59.
     // O BYPASS de cada canal é um RQ1 de 1 byte em 00 05 <canal> 06.
     // O LINK é um RQ1 de 1 byte em 00 05 00 05.

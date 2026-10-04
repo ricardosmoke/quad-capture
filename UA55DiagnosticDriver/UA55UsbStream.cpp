@@ -1284,6 +1284,14 @@ bool IsLoCutPacket(const uint8_t* bytes, uint32_t length)
         if (value > 50) {
             return false;
         }
+    } else if (parameter == 0x0A) {
+        if (value > 50) {
+            return false;
+        }
+    } else if (parameter == 0x0B) {
+        if (value > 8) {
+            return false;
+        }
     } else {
         return false;
     }

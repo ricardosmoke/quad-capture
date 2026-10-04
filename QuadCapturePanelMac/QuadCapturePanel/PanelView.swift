@@ -416,7 +416,10 @@ enum PanelCanvas {
         button(&context, x, y + 18, 70, 32, "BYPASS", gray: !strip.bypass)
         text(&context, "GR", x + 78, y, 36, 14, 10, label, bold: true)
         meter(&context, x + 84, y + 16, 100, gr, peak: gr, showClip: false)
-        graph(&context, x + 186, y + 8, 104, 104, gate: strip.gate)
+        graph(
+            &context, x + 186, y + 8, 104, 104,
+            gate: strip.gate, threshold: strip.threshold, ratio: strip.ratio,
+            bypassed: strip.bypass)
         meter(&context, x + 368, y + 8, 116, out, peak: outPeak, showClip: true)
 
         let labels = ["GATE", "THRESHOLD", "RATIO", "ATTACK", "RELEASE", "GAIN"]
@@ -549,49 +552,95 @@ enum PanelCanvas {
 
     /// Visor do compressor. O quadrado é só a grade; a escala -60…0 fica
     /// fora dele, embaixo e à direita, como no painel da Roland.
-    /// O gate vai de -70 (-INF), na borda esquerda, até -20.
+    /// A curva usa o GATE, o THRESHOLD e o RATIO desta faixa.
     private static func graph(
         _ context: inout GraphicsContext,
         _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
-        gate: Double
+        gate: Double, threshold: Double, ratio: Double, bypassed: Bool
     ) {
         let plot = min(w, h)
         let marks = ["-60", "-48", "-36", "-24", "-12", "0"]
         let steps = CGFloat(marks.count - 1)
+        let gateStep = min(50, max(0, Int((min(1, max(0, gate)) * 50).rounded())))
+        let gateDb = -70.0 + Double(gateStep)
+        let gateKnee = gateDb > -60
+        let thresholdStep = min(50, max(0, Int((min(1, max(0, threshold)) * 50).rounded())))
+        let thresholdDb = Double(thresholdStep) - 50
+        let ratioStep = min(8, max(0, Int((min(1, max(0, ratio)) * 8).rounded())))
+        let ratioDivisor = [1.0, 1.2, 1.5, 2.0, 2.8, 4.0, 8.0, 16.0, 0][ratioStep]
 
-        let gateDb = -70.0 + min(1, max(0, gate)) * 50.0
-        let fraction = min(1, max(0, (gateDb + 60.0) / 60.0))
-        let gateX = x + CGFloat(fraction) * plot
-        let gateY = y + plot - CGFloat(fraction) * plot
+        func outputDb(_ input: Double) -> Double {
+            if input <= thresholdDb {
+                return input
+            }
+            if ratioDivisor == 0 {
+                return thresholdDb
+            }
+            return thresholdDb + (input - thresholdDb) / ratioDivisor
+        }
 
-        fill(&context, Path(CGRect(x: x, y: y, width: plot, height: plot)), Color(hex: 0xE39B45))
+        func plotX(_ db: Double) -> CGFloat {
+            let fraction = min(1, max(0, (db + 60) / 60))
+            return x + CGFloat(fraction) * plot
+        }
+
+        func plotY(_ db: Double) -> CGFloat {
+            let fraction = min(1, max(0, (db + 60) / 60))
+            return y + plot - CGFloat(fraction) * plot
+        }
+
+        var samples: [(Double, Double)] = []
+        if gateKnee {
+            samples.append((gateDb, -60))
+            samples.append((gateDb, outputDb(gateDb)))
+            if gateDb < thresholdDb {
+                samples.append((thresholdDb, thresholdDb))
+            }
+        } else {
+            samples.append((-60, outputDb(-60)))
+            if thresholdDb > -60 {
+                samples.append((thresholdDb, thresholdDb))
+            }
+        }
+        if samples.last?.0 != 0 {
+            samples.append((0, outputDb(0)))
+        }
+
+        let field = Color(hex: bypassed ? 0x8C8882 : 0xE39B45)
+        let under = Color(hex: bypassed ? 0x5C5854 : 0xC4621E)
+        let grid = Color(hex: bypassed ? 0x3E3C3A : 0x8A3A12)
+        let curveColor = Color(hex: bypassed ? 0xC8C4BE : 0xFFF8EC)
+        let scale = bypassed ? Color(hex: 0x8A8680) : label
+
+        fill(&context, Path(CGRect(x: x, y: y, width: plot, height: plot)), field)
 
         var lower = Path()
-        lower.move(to: point(gateX, gateY))
-        lower.addLine(to: point(x + plot, y))
+        lower.move(to: point(plotX(samples[0].0), plotY(samples[0].1)))
+        for sample in samples.dropFirst() {
+            lower.addLine(to: point(plotX(sample.0), plotY(sample.1)))
+        }
         lower.addLine(to: point(x + plot, y + plot))
-        lower.addLine(to: point(gateX, y + plot))
+        lower.addLine(to: point(plotX(samples[0].0), y + plot))
         lower.closeSubpath()
-        context.fill(lower, with: .color(Color(hex: 0xC4621E)))
+        context.fill(lower, with: .color(under))
 
-        let grid = Color(hex: 0x8A3A12)
         for index in marks.indices {
             let t = CGFloat(index) / steps
             let gx = x + t * plot
             let gy = y + plot - t * plot
             strokeLine(&context, gx, y, gx, y + plot, grid, 1)
             strokeLine(&context, x, gy, x + plot, gy, grid, 1)
-            text(&context, marks[index], gx - 13, y + plot + 2, 26, 12, 8, label, bold: false)
+            text(&context, marks[index], gx - 13, y + plot + 2, 26, 12, 8, scale, bold: false)
             text(
-                &context, marks[index], x + plot + 4, gy - 6, 24, 12, 8, label,
+                &context, marks[index], x + plot + 4, gy - 6, 24, 12, 8, scale,
                 bold: false, left: true)
         }
 
-        let curveColor = Color(hex: 0xFFF8EC)
         var curve = Path()
-        curve.move(to: point(gateX, y + plot))
-        curve.addLine(to: point(gateX, gateY))
-        curve.addLine(to: point(x + plot, y))
+        curve.move(to: point(plotX(samples[0].0), plotY(samples[0].1)))
+        for sample in samples.dropFirst() {
+            curve.addLine(to: point(plotX(sample.0), plotY(sample.1)))
+        }
         context.stroke(curve, with: .color(curveColor), lineWidth: 1.5)
     }
 
