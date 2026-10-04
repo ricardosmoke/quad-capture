@@ -52,6 +52,19 @@ struct PanelView: View {
                 PhaseButton(frame: layout.viewRect(for: PanelLayout.autoSensHit), helpText: "Ligar ou desligar o AUTO-SENS") {
                     model.pressAutoSens()
                 }
+
+                PhaseButton(frame: layout.viewRect(for: PanelLayout.linkHit), helpText: "Ligar ou desligar o LINK") {
+                    model.toggleLink()
+                }
+
+                ForEach(0..<2, id: \.self) { channel in
+                    PhaseButton(
+                        frame: layout.viewRect(for: PanelLayout.bypassHit(channel: channel)),
+                        helpText: "Ligar ou desligar o BYPASS"
+                    ) {
+                        model.toggleBypass(channel: channel)
+                    }
+                }
             }
         }
         .onAppear {
@@ -113,6 +126,15 @@ struct PanelLayout {
         let channelX: CGFloat = 16
         let channelY: CGFloat = channel == 0 ? 78 : 356
         return CGRect(x: channelX + 36, y: channelY + 44, width: 72, height: 26)
+    }
+
+    /// LINK entre as faixas do compressor: (220, 286, 70, 32).
+    static let linkHit = CGRect(x: 220, y: 286, width: 70, height: 32)
+
+    /// BYPASS dentro de `compStrip`: (x, y+18, 70, 32). Faixa 1 em (220, 78), faixa 2 em (220, 324).
+    static func bypassHit(channel: Int) -> CGRect {
+        let stripY: CGFloat = channel == 0 ? 78 : 324
+        return CGRect(x: 220, y: stripY + 18, width: 70, height: 32)
     }
 
     /// AUTO SENS entre os dois canais: x+44, 72×40, centralizado no vão.
@@ -379,7 +401,7 @@ enum PanelCanvas {
         frame(&context, x, y, w, h)
         title(&context, "COMPRESSOR", x, y + 6, w)
         compStrip(&context, x + 10, y + 40, strip: state.comp1, gr: state.gr1, out: state.compOut1, outPeak: state.compOut1Peak)
-        button(&context, x + 10, y + 248, 70, 32, "LINK", gray: false)
+        button(&context, x + 10, y + 248, 70, 32, "LINK", gray: !state.linkOn)
         compStrip(&context, x + 10, y + 286, strip: state.comp2, gr: state.gr2, out: state.compOut2, outPeak: state.compOut2Peak)
     }
 
@@ -391,7 +413,7 @@ enum PanelCanvas {
         out: CGFloat,
         outPeak: CGFloat
     ) {
-        button(&context, x, y + 18, 70, 32, "BYPASS", gray: strip.bypass)
+        button(&context, x, y + 18, 70, 32, "BYPASS", gray: !strip.bypass)
         text(&context, "GR", x + 78, y, 36, 14, 10, label, bold: true)
         meter(&context, x + 84, y + 16, 100, gr, peak: gr, showClip: false)
         graph(&context, x + 186, y + 8, 104, 104)

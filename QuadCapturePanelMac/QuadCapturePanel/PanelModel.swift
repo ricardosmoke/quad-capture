@@ -28,6 +28,7 @@ final class PanelModel: ObservableObject {
         var phase1: Bool = false
         var phase2: Bool = false
         var loCutStatus: String = ""
+        var linkOn: Bool = false
         var comp1 = CompStrip()
         var comp2 = CompStrip()
         var mixOutput: Double = 0.7
@@ -58,6 +59,7 @@ final class PanelModel: ObservableObject {
     @Published var phase1 = false
     @Published var phase2 = false
     @Published var loCutStatus = ""
+    @Published var linkOn = false
     private var loCutBusy = false
     private var autoSensEpoch = 0
     private var sensHold = [false, false]
@@ -95,6 +97,7 @@ final class PanelModel: ObservableObject {
         s.phase1 = phase1
         s.phase2 = phase2
         s.loCutStatus = loCutStatus
+        s.linkOn = linkOn
         s.comp1 = comp1
         s.comp2 = comp2
         s.mixOutput = mixOutput
@@ -129,15 +132,12 @@ final class PanelModel: ObservableObject {
             let error = LoCutMIDI.send(channel: UInt8(channel), on: turningOn)
             Task { @MainActor in
                 guard let self else { return }
-                self.loCutBusy = false
-                if let error {
-                    self.loCutStatus = error
-                } else if channel == 0 {
-                    self.loCut1 = turningOn
-                    self.loCutStatus = ""
-                } else {
-                    self.loCut2 = turningOn
-                    self.loCutStatus = ""
+                self.finishControl(error) {
+                    if channel == 0 {
+                        self.loCut1 = turningOn
+                    } else {
+                        self.loCut2 = turningOn
+                    }
                 }
             }
         }
@@ -152,15 +152,69 @@ final class PanelModel: ObservableObject {
             let error = LoCutMIDI.sendPhase(channel: UInt8(channel), on: turningOn)
             Task { @MainActor in
                 guard let self else { return }
-                self.loCutBusy = false
+                self.finishControl(error) {
+                    if channel == 0 {
+                        self.phase1 = turningOn
+                    } else {
+                        self.phase2 = turningOn
+                    }
+                }
+            }
+        }
+    }
+
+    /// Faixa 1 da tela é o canal 1 da placa. 01 é bypass; 00 deixa o compressor ativo.
+    /// Com o LINK ligado, o clique na faixa 1 também clica a faixa 2 antes da leitura.
+    func toggleBypass(channel: Int) {
+        guard channel == 0 || channel == 1, !loCutBusy else { return }
+        let turningOn = channel == 0 ? !comp1.bypass : !comp2.bypass
+        let deviceChannel: UInt8 = channel == 0 ? 1 : 0
+        let alsoBypass2 = channel == 0 && linkOn
+        let bypass2On = !comp2.bypass
+        loCutBusy = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendBypass(channel: deviceChannel, on: turningOn)
+            let followError: String? = (error == nil && alsoBypass2)
+                ? LoCutMIDI.sendBypass(channel: 0, on: bypass2On)
+                : nil
+            Task { @MainActor in
+                guard let self else { return }
                 if let error {
+                    self.loCutBusy = false
                     self.loCutStatus = error
-                } else if channel == 0 {
-                    self.phase1 = turningOn
-                    self.loCutStatus = ""
+                    return
+                }
+                if channel == 0 {
+                    self.comp1.bypass = turningOn
                 } else {
-                    self.phase2 = turningOn
-                    self.loCutStatus = ""
+                    self.comp2.bypass = turningOn
+                }
+                if let followError {
+                    self.loCutBusy = false
+                    self.loCutStatus = followError
+                    return
+                }
+                if alsoBypass2 {
+                    self.comp2.bypass = bypass2On
+                }
+                self.loCutStatus = ""
+                self.loCutBusy = false
+                self.refreshButtonsFromBoard()
+            }
+        }
+    }
+
+    /// Um único LINK. 01 liga as duas faixas do compressor.
+    func toggleLink() {
+        guard !loCutBusy else { return }
+        let turningOn = !linkOn
+        loCutBusy = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendLink(on: turningOn)
+            Task { @MainActor in
+                guard let self else { return }
+                self.finishControl(error) {
+                    self.linkOn = turningOn
                 }
             }
         }
@@ -174,17 +228,25 @@ final class PanelModel: ObservableObject {
             let error = LoCutMIDI.sendAutoSens()
             Task { @MainActor in
                 guard let self else { return }
-                self.loCutBusy = false
-                if let error {
-                    self.loCutStatus = error
-                } else {
+                self.finishControl(error) {
                     self.autoSensEpoch += 1
                     self.autoSensText = self.autoSensText == "on" ? "off" : "on"
                     HardwareGain.rememberAutoSens(self.autoSensText)
-                    self.loCutStatus = ""
                 }
             }
         }
+    }
+
+    /// O envio terminou. Se a placa aceitou, os botões voltam a ser lidos dela.
+    private func finishControl(_ error: String?, apply: () -> Void) {
+        loCutBusy = false
+        if let error {
+            loCutStatus = error
+            return
+        }
+        apply()
+        loCutStatus = ""
+        refreshButtonsFromBoard()
     }
 
     /// Arraste do knob. O passo é o dB mostrado vezes 2. A leitura da placa não passa por aqui.
@@ -296,8 +358,16 @@ final class PanelModel: ObservableObject {
         guard !stateRequested else { return }
         stateRequested = true
         showButtonsOff()
+        requestBoardButtons()
+    }
+
+    /// O mesmo pedido da abertura: bloco de 59 bytes, os dois BYPASS e o LINK.
+    private func requestBoardButtons() {
         PanelWork.queue.async { [weak self] in
             let error = LoCutMIDI.requestState()
+            let bypassError = error == nil ? LoCutMIDI.requestBypass(channel: 0) : nil
+            let bypassError2 = error == nil ? LoCutMIDI.requestBypass(channel: 1) : nil
+            let linkError = error == nil ? LoCutMIDI.requestLink() : nil
             if error == nil {
                 HardwareGain.collectState()
             }
@@ -305,12 +375,24 @@ final class PanelModel: ObservableObject {
                 guard let self else { return }
                 if let error {
                     self.loCutStatus = error
+                } else if let bypassError {
+                    self.loCutStatus = bypassError
+                } else if let bypassError2 {
+                    self.loCutStatus = bypassError2
+                } else if let linkError {
+                    self.loCutStatus = linkError
                 }
             }
         }
     }
 
-    /// Antes da leitura desta conexão, LO-CUT, PHASE e AUTO-SENS ficam off.
+    /// Depois do clique, sem apagar o desenho: a resposta desta leitura substitui o que estiver na tela.
+    private func refreshButtonsFromBoard() {
+        HardwareGain.armRefresh()
+        requestBoardButtons()
+    }
+
+    /// Antes da leitura desta conexão, LO-CUT, PHASE, AUTO-SENS, BYPASS e LINK ficam off.
     private func showButtonsOff() {
         autoSensEpoch += 1
         loCut1 = false
@@ -318,6 +400,9 @@ final class PanelModel: ObservableObject {
         phase1 = false
         phase2 = false
         autoSensText = "off"
+        comp1.bypass = false
+        comp2.bypass = false
+        linkOn = false
         HardwareGain.beginRead()
     }
 
@@ -330,6 +415,9 @@ final class PanelModel: ObservableObject {
         if let value = shown.loCut2 { loCut2 = value }
         if let value = shown.phase1 { phase1 = value }
         if let value = shown.phase2 { phase2 = value }
+        if let value = shown.bypass1 { comp1.bypass = value }
+        if let value = shown.bypass2 { comp2.bypass = value }
+        if let value = shown.link { linkOn = value }
     }
 
     func stop() {

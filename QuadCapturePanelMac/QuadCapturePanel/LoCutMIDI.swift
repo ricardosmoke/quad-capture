@@ -62,6 +62,57 @@ enum LoCutMIDI {
         return nil
     }
 
+    /// BYPASS do compressor. O canal é o da placa: 1 é a faixa 1 da tela. 01 deixa o compressor em bypass.
+    static func sendBypass(channel: UInt8, on: Bool) -> String? {
+        guard channel <= 1 else { return "Falha ao enviar BYPASS" }
+        let sysex = bypassMessage(channel: channel, on: on)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logSend(channel: channel, on: on, dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes, label: "bypass")
+            if status != noErr {
+                return "Falha ao enviar BYPASS (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logSend(channel: channel, on: on, dest: "driver", wrap: true, status: status, bytes: packets, label: "bypass")
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar BYPASS (\(status))"
+        }
+        return nil
+    }
+
+    /// LINK do compressor. Endereço fixo 00 05 00 05. 01 liga.
+    static func sendLink(on: Bool) -> String? {
+        let sysex = linkMessage(on: on)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("link on=\(on ? 1 : 0)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar LINK (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("link on=\(on ? 1 : 0)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar LINK (\(status))"
+        }
+        return nil
+    }
+
     /// Pressionamento do AUTO-SENS. O dado é sempre 01; a placa liga e desliga sozinha.
     static func sendAutoSens() -> String? {
         let sysex = autoSensMessage()
@@ -108,6 +159,57 @@ enum LoCutMIDI {
                 return "QUAD-CAPTURE não encontrada"
             }
             return "Falha ao ler o estado (\(status))"
+        }
+        return nil
+    }
+
+    /// Um byte em 00 05 <canal> 06. Cada faixa tem a própria resposta.
+    static func requestBypass(channel: UInt8) -> String? {
+        guard channel <= 1 else { return "Falha ao ler o BYPASS" }
+        let sysex = bypassRequest(channel: channel)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("bypass rq1 ch=\(channel)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao ler o BYPASS (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("bypass rq1 ch=\(channel)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao ler o BYPASS (\(status))"
+        }
+        return nil
+    }
+
+    /// Um byte em 00 05 00 05. A resposta só atualiza o LINK.
+    static func requestLink() -> String? {
+        let sysex = linkRequest()
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("link rq1", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao ler o LINK (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("link rq1", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao ler o LINK (\(status))"
         }
         return nil
     }
@@ -175,10 +277,38 @@ enum LoCutMIDI {
         return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x02, value, sum, 0xF7]
     }
 
+    private static func linkMessage(on: Bool) -> [UInt8] {
+        let value: UInt8 = on ? 0x01 : 0x00
+        let total = 0x00 + 0x05 + 0x00 + 0x05 + Int(value)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, 0x00, 0x05, value, sum, 0xF7]
+    }
+
+    private static func bypassMessage(channel: UInt8, on: Bool) -> [UInt8] {
+        let value: UInt8 = on ? 0x01 : 0x00
+        let total = 0x00 + 0x05 + Int(channel) + 0x06 + Int(value)
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x05, channel, 0x06, value, sum, 0xF7]
+    }
+
     private static func autoSensMessage() -> [UInt8] {
         let total = 0x00 + 0x02 + 0x01 + 0x02 + 0x01
         let sum = UInt8((0 - total) & 0x7F)
         return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x02, 0x01, 0x02, 0x01, sum, 0xF7]
+    }
+
+    /// RQ1 de 1 byte em 00 05 00 05. O checksum é (0 - soma) & 0x7F sobre o endereço e o tamanho.
+    private static func linkRequest() -> [UInt8] {
+        let total = 0x00 + 0x05 + 0x00 + 0x05 + 0x00 + 0x00 + 0x00 + 0x01
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x11, 0x00, 0x05, 0x00, 0x05, 0x00, 0x00, 0x00, 0x01, sum, 0xF7]
+    }
+
+    /// RQ1 de 1 byte. O checksum é (0 - soma) & 0x7F sobre o endereço e o tamanho.
+    private static func bypassRequest(channel: UInt8) -> [UInt8] {
+        let total = 0x00 + 0x05 + Int(channel) + 0x06 + 0x00 + 0x00 + 0x00 + 0x01
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x11, 0x00, 0x05, channel, 0x06, 0x00, 0x00, 0x00, 0x01, sum, 0xF7]
     }
 
     /// RQ1 01 00 00 00, tamanho 00 00 00 3B. O checksum 44 é (0 - soma) & 0x7F.

@@ -1272,7 +1272,7 @@ bool IsLoCutPacket(const uint8_t* bytes, uint32_t length)
     if (channel > 1) {
         return false;
     }
-    if (parameter == 0x01 || parameter == 0x02) {
+    if (parameter == 0x01 || parameter == 0x02 || parameter == 0x05 || parameter == 0x06) {
         if (value > 1) {
             return false;
         }
@@ -1313,6 +1313,71 @@ bool IsStateRequestPacket(const uint8_t* bytes, uint32_t length)
     return bytes != nullptr && length == 24 && memcmp(bytes, packet, 24) == 0;
 }
 
+bool IsBypassReadPacket(const uint8_t* bytes, uint32_t length)
+{
+    if (bytes == nullptr || length != 24) {
+        return false;
+    }
+    if (bytes[0] != 0x14 || bytes[4] != 0x14 || bytes[8] != 0x14 || bytes[12] != 0x14
+        || bytes[16] != 0x14 || bytes[20] != 0x16) {
+        return false;
+    }
+    if (bytes[1] != 0xF0 || bytes[2] != 0x41 || bytes[3] != 0x10) {
+        return false;
+    }
+    if (bytes[5] != 0x00 || bytes[6] != 0x00 || bytes[7] != 0x56) {
+        return false;
+    }
+    if (bytes[9] != 0x11 || bytes[10] != 0x00 || bytes[11] != 0x05) {
+        return false;
+    }
+    const uint8_t channel = bytes[13];
+    if (channel > 1 || bytes[14] != 0x06 || bytes[15] != 0x00) {
+        return false;
+    }
+    if (bytes[17] != 0x00 || bytes[18] != 0x00 || bytes[19] != 0x01) {
+        return false;
+    }
+    if (bytes[22] != 0xF7 || bytes[23] != 0x00) {
+        return false;
+    }
+    const int total = 0x00 + 0x05 + (int)channel + 0x06 + 0x00 + 0x00 + 0x00 + 0x01;
+    const uint8_t sum = (uint8_t)((0 - total) & 0x7F);
+    return bytes[21] == sum;
+}
+
+bool IsLinkReadPacket(const uint8_t* bytes, uint32_t length)
+{
+    if (bytes == nullptr || length != 24) {
+        return false;
+    }
+    if (bytes[0] != 0x14 || bytes[4] != 0x14 || bytes[8] != 0x14 || bytes[12] != 0x14
+        || bytes[16] != 0x14 || bytes[20] != 0x16) {
+        return false;
+    }
+    if (bytes[1] != 0xF0 || bytes[2] != 0x41 || bytes[3] != 0x10) {
+        return false;
+    }
+    if (bytes[5] != 0x00 || bytes[6] != 0x00 || bytes[7] != 0x56) {
+        return false;
+    }
+    if (bytes[9] != 0x11 || bytes[10] != 0x00 || bytes[11] != 0x05) {
+        return false;
+    }
+    if (bytes[13] != 0x00 || bytes[14] != 0x05 || bytes[15] != 0x00) {
+        return false;
+    }
+    if (bytes[17] != 0x00 || bytes[18] != 0x00 || bytes[19] != 0x01) {
+        return false;
+    }
+    if (bytes[22] != 0xF7 || bytes[23] != 0x00) {
+        return false;
+    }
+    const int total = 0x00 + 0x05 + 0x00 + 0x05 + 0x00 + 0x00 + 0x00 + 0x01;
+    const uint8_t sum = (uint8_t)((0 - total) & 0x7F);
+    return bytes[21] == sum;
+}
+
 } // namespace
 
 kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
@@ -1320,7 +1385,9 @@ kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
     const bool loCut = IsLoCutPacket(bytes, length);
     const bool autoSens = IsAutoSensPacket(bytes, length);
     const bool stateRequest = IsStateRequestPacket(bytes, length);
-    if (!loCut && !autoSens && !stateRequest) {
+    const bool bypassRead = IsBypassReadPacket(bytes, length);
+    const bool linkRead = IsLinkReadPacket(bytes, length);
+    if (!loCut && !autoSens && !stateRequest && !bypassRead && !linkRead) {
         return kIOReturnBadArgument;
     }
     if (midiOutPipe_ == nullptr) {
@@ -1350,6 +1417,12 @@ kern_return_t UA55UsbStream::SendMidi(const uint8_t* bytes, uint32_t length)
     OSSafeReleaseNULL(buffer);
     if (stateRequest) {
         os_log(OS_LOG_DEFAULT, "[UA55] state rq1 status=0x%08x transferred=%u",
+               (unsigned int)result, transferred);
+    } else if (bypassRead) {
+        os_log(OS_LOG_DEFAULT, "[UA55] bypass rq1 ch=%u status=0x%08x transferred=%u",
+               bytes[13], (unsigned int)result, transferred);
+    } else if (linkRead) {
+        os_log(OS_LOG_DEFAULT, "[UA55] link rq1 status=0x%08x transferred=%u",
                (unsigned int)result, transferred);
     } else if (autoSens) {
         os_log(OS_LOG_DEFAULT, "[UA55] autosens press status=0x%08x transferred=%u",
@@ -1555,6 +1628,19 @@ void UA55UsbStream::HandleSysEx(const uint8_t* msg, uint32_t length)
             used += (uint32_t)snprintf(hex + used, sizeof(hex) - used, "%02x", msg[11 + index]);
         }
         os_log(OS_LOG_DEFAULT, "[UA55] dt1 %{public}s", hex);
+        return;
+    }
+    // 00 05 <canal> 06 = BYPASS daquele compressor. O filtro de DT1 repetido
+    // esconderia a leitura seguinte, então cada resposta é registrada.
+    if (dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x05 && addr[3] == 0x06 && addr[2] <= 1
+        && (data == 0x00 || data == 0x01)) {
+        os_log(OS_LOG_DEFAULT, "[UA55] bypass %u %u", addr[2], data);
+        return;
+    }
+    // 00 05 00 05 = LINK. Cada resposta é registrada, senão a leitura seguinte some.
+    if (dataBytes >= 1 && addr[0] == 0x00 && addr[1] == 0x05 && addr[2] == 0x00 && addr[3] == 0x05
+        && (data == 0x00 || data == 0x01)) {
+        os_log(OS_LOG_DEFAULT, "[UA55] link %u", data);
         return;
     }
     // 00 05 <canal> 04 = SENS daquele preamp. O byte vai de 0 a 127

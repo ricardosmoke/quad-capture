@@ -11,6 +11,9 @@ struct PreampSwitches: Equatable {
     var loCut2: Bool?
     var phase1: Bool?
     var phase2: Bool?
+    var bypass1: Bool?
+    var bypass2: Bool?
+    var link: Bool?
 }
 
 enum HardwareGain {
@@ -57,6 +60,11 @@ enum HardwareGain {
         SensFeed.shared.beginRead()
     }
 
+    /// Depois de um clique: a próxima resposta da placa pode corrigir os botões.
+    static func armRefresh() {
+        SensFeed.shared.armRefresh()
+    }
+
     /// A resposta do RQ1 pode cair antes do `log stream` existir. Esta busca pega o DT1 desta conexão.
     static func collectState() {
         SensFeed.shared.collectState()
@@ -86,7 +94,14 @@ private final class SensFeed: @unchecked Sendable {
     private var device = "—"
     private var loCut: [Bool?] = [nil, nil]
     private var phase: [Bool?] = [nil, nil]
+    private var bypass: [Bool?] = [nil, nil]
+    private var link: Bool?
+    /// A primeira resposta desta conexão, uma por canal. O eco seguinte não copia o outro canal.
+    private var bypassSeen = [false, false]
+    private var linkSeen = false
+    private var setupSeen = false
     private var buttonGen = 0
+    private var collectGen = 0
     /// Linhas anteriores a isto são de outra conexão e não acendem botão.
     private var readAfter: Date?
     private let logStamp: DateFormatter = {
@@ -152,8 +167,28 @@ private final class SensFeed: @unchecked Sendable {
         readAfter = Date()
         loCut = [false, false]
         phase = [false, false]
+        bypass = [false, false]
+        bypassSeen = [false, false]
+        link = false
+        linkSeen = false
+        setupSeen = false
         device = "off"
         buttonGen += 1
+        collectGen += 1
+        lock.unlock()
+    }
+
+    func armRefresh() {
+        lock.lock()
+        readAfter = Date()
+        loCut = [nil, nil]
+        phase = [nil, nil]
+        bypass = [nil, nil]
+        link = nil
+        bypassSeen = [false, false]
+        linkSeen = false
+        setupSeen = false
+        collectGen += 1
         lock.unlock()
     }
 
@@ -169,7 +204,9 @@ private final class SensFeed: @unchecked Sendable {
         return PreampSwitches(
             generation: buttonGen,
             loCut1: loCut[0], loCut2: loCut[1],
-            phase1: phase[0], phase2: phase[1])
+            phase1: phase[0], phase2: phase[1],
+            bypass1: bypass[0], bypass2: bypass[1],
+            link: link)
     }
 
     private func openUserClient() -> Bool {
@@ -216,7 +253,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "show", "--last", "10m", "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link""#
         ]
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -234,6 +271,8 @@ private final class SensFeed: @unchecked Sendable {
         for line in text.split(whereSeparator: \.isNewline) {
             let text = String(line)
             _ = applyDevice(text)
+            _ = applyBypassRead(text)
+            _ = applyLinkRead(text)
             _ = applySetup(text)
             if apply(text) {
                 applied += 1
@@ -248,21 +287,40 @@ private final class SensFeed: @unchecked Sendable {
 
     /// Procura o DT1 gravado depois de `beginRead`. Para no primeiro bloco de 59 bytes.
     func collectState() {
+        lock.lock()
+        collectGen += 1
+        let generation = collectGen
+        lock.unlock()
         queue.async { [weak self] in
-            self?.collectStateAttempt(0)
+            self?.collectStateAttempt(0, generation: generation)
         }
     }
 
-    private func collectStateAttempt(_ attempt: Int) {
+    private func collectStateAttempt(_ attempt: Int, generation: Int) {
+        lock.lock()
+        let current = collectGen
+        lock.unlock()
+        guard generation == current else { return }
         guard attempt < 6 else {
-            PanelLog.write("state read missed")
+            lock.lock()
+            let setup = setupSeen
+            let bypassOk = bypassSeen[0] && bypassSeen[1]
+            let linkOk = linkSeen
+            lock.unlock()
+            if !setup {
+                PanelLog.write("state read missed")
+            } else if !bypassOk {
+                PanelLog.write("bypass read missed")
+            } else if !linkOk {
+                PanelLog.write("link read missed")
+            }
             return
         }
         if pullStateSinceRead() {
             return
         }
         queue.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.collectStateAttempt(attempt + 1)
+            self?.collectStateAttempt(attempt + 1, generation: generation)
         }
     }
 
@@ -280,7 +338,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "show", "--start", start, "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link""#
         ]
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -298,6 +356,14 @@ private final class SensFeed: @unchecked Sendable {
         for line in text.split(whereSeparator: \.isNewline) {
             let text = String(line)
             _ = applyDevice(text)
+            if applyBypassRead(text) {
+                let shown = switches()
+                PanelLog.write("bypass read by1=\(shown.bypass1.map { $0 ? 1 : 0 } ?? -1) by2=\(shown.bypass2.map { $0 ? 1 : 0 } ?? -1)")
+            }
+            if applyLinkRead(text) {
+                let shown = switches()
+                PanelLog.write("link read \(shown.link.map { $0 ? 1 : 0 } ?? -1)")
+            }
             if applySetup(text) {
                 found = true
             }
@@ -305,9 +371,13 @@ private final class SensFeed: @unchecked Sendable {
         }
         if found {
             let shown = switches()
-            PanelLog.write("state lo1=\(shown.loCut1.map { $0 ? 1 : 0 } ?? -1) lo2=\(shown.loCut2.map { $0 ? 1 : 0 } ?? -1) ph1=\(shown.phase1.map { $0 ? 1 : 0 } ?? -1) ph2=\(shown.phase2.map { $0 ? 1 : 0 } ?? -1)")
+            PanelLog.write("state lo1=\(shown.loCut1.map { $0 ? 1 : 0 } ?? -1) lo2=\(shown.loCut2.map { $0 ? 1 : 0 } ?? -1) ph1=\(shown.phase1.map { $0 ? 1 : 0 } ?? -1) ph2=\(shown.phase2.map { $0 ? 1 : 0 } ?? -1) by1=\(shown.bypass1.map { $0 ? 1 : 0 } ?? -1) by2=\(shown.bypass2.map { $0 ? 1 : 0 } ?? -1) link=\(shown.link.map { $0 ? 1 : 0 } ?? -1)")
         }
-        return found
+        lock.lock()
+        let bypassOk = bypassSeen[0] && bypassSeen[1]
+        let linkOk = linkSeen
+        lock.unlock()
+        return found && bypassOk && linkOk
     }
 
     private func startStream() {
@@ -321,7 +391,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "stream", "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link""#
         ]
         let output = FileHandle(fileDescriptor: replica, closeOnDealloc: false)
         process.standardOutput = output
@@ -367,9 +437,17 @@ private final class SensFeed: @unchecked Sendable {
                 lock.unlock()
                 PanelLog.write("device \(shown)")
             }
+            if applyBypassRead(text) {
+                let shown = switches()
+                PanelLog.write("bypass read by1=\(shown.bypass1.map { $0 ? 1 : 0 } ?? -1) by2=\(shown.bypass2.map { $0 ? 1 : 0 } ?? -1)")
+            }
+            if applyLinkRead(text) {
+                let shown = switches()
+                PanelLog.write("link read \(shown.link.map { $0 ? 1 : 0 } ?? -1)")
+            }
             if applySetup(text) {
                 let shown = switches()
-                PanelLog.write("state lo1=\(shown.loCut1.map { $0 ? 1 : 0 } ?? -1) lo2=\(shown.loCut2.map { $0 ? 1 : 0 } ?? -1) ph1=\(shown.phase1.map { $0 ? 1 : 0 } ?? -1) ph2=\(shown.phase2.map { $0 ? 1 : 0 } ?? -1)")
+                PanelLog.write("state lo1=\(shown.loCut1.map { $0 ? 1 : 0 } ?? -1) lo2=\(shown.loCut2.map { $0 ? 1 : 0 } ?? -1) ph1=\(shown.phase1.map { $0 ? 1 : 0 } ?? -1) ph2=\(shown.phase2.map { $0 ? 1 : 0 } ?? -1) by1=\(shown.bypass1.map { $0 ? 1 : 0 } ?? -1) by2=\(shown.bypass2.map { $0 ? 1 : 0 } ?? -1) link=\(shown.link.map { $0 ? 1 : 0 } ?? -1)")
             }
             if apply(text) {
                 lock.lock()
@@ -416,6 +494,7 @@ private final class SensFeed: @unchecked Sendable {
     /// Byte 23: bit 0 = LO-CUT 1, bit 1 = LO-CUT 2.
     /// Byte 24: bit 0 = PHASE 1, bit 1 = PHASE 2.
     /// SENS 1 e 2 são os bytes 25 e 26.
+    /// BYPASS não entra aqui: cada canal chega na própria resposta 00 05 <canal> 06.
     /// AUTO-SENS é o byte 21: 02 ligado, 00 desligado. Não devolve comando nenhum.
     private func applySetup(_ message: String) -> Bool {
         guard let range = message.range(of: "[UA55] dt1 ") else { return false }
@@ -442,6 +521,7 @@ private final class SensFeed: @unchecked Sendable {
         loCut[1] = (bytes[23] & 0x02) != 0
         phase[0] = (bytes[24] & 0x01) != 0
         phase[1] = (bytes[24] & 0x02) != 0
+        setupSeen = true
         let sens1 = bytes[25]
         let sens2 = bytes[26]
         if sens1 <= 108 {
@@ -451,6 +531,45 @@ private final class SensFeed: @unchecked Sendable {
             right = min(Int(HardwareGain.sensMaxDb), Int(sens2) / 2)
         }
         device = bytes[21] == 0x02 ? "on" : "off"
+        buttonGen += 1
+        return true
+    }
+
+    /// A primeira resposta 00 05 <canal> 06 desta conexão. O canal 0 da placa é o BYPASS 2 da tela.
+    private func applyBypassRead(_ message: String) -> Bool {
+        guard isCurrentRead(message) else { return false }
+        guard let marker = message.range(of: "[UA55] bypass ") else { return false }
+        let parts = message[marker.upperBound...].split(whereSeparator: \.isWhitespace)
+        guard parts.count >= 2, let channel = Int(parts[0]), let value = Int(parts[1]), channel <= 1 else {
+            return false
+        }
+        let screen = channel == 0 ? 1 : 0
+        lock.lock()
+        defer { lock.unlock() }
+        if bypassSeen[screen] {
+            return false
+        }
+        bypassSeen[screen] = true
+        bypass[screen] = value == 1
+        buttonGen += 1
+        return true
+    }
+
+    /// A primeira resposta 00 05 00 05 desta leitura. 01 liga o LINK.
+    private func applyLinkRead(_ message: String) -> Bool {
+        guard isCurrentRead(message) else { return false }
+        guard let marker = message.range(of: "[UA55] link ") else { return false }
+        let parts = message[marker.upperBound...].split(whereSeparator: \.isWhitespace)
+        guard let value = parts.first.flatMap({ Int($0) }), value <= 1 else {
+            return false
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        if linkSeen {
+            return false
+        }
+        linkSeen = true
+        link = value == 1
         buttonGen += 1
         return true
     }
