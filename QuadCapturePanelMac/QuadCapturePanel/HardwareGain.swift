@@ -81,6 +81,10 @@ enum HardwareGain {
     }
 }
 
+private final class OutputBox: @unchecked Sendable {
+    var data = Data()
+}
+
 /// O user client do dext exige um entitlement que este app ainda não tem
 /// (`IOServiceOpen` volta `0xe00002e2`). O ganho então sai do `log stream`
 /// da dext, que grava cada mudança do knob. O arquivo do OSLogStore atrasa
@@ -89,6 +93,8 @@ private final class SensFeed: @unchecked Sendable {
     static let shared = SensFeed()
 
     private let queue = DispatchQueue(label: "dev.ua55.panel.sens")
+    private let readerQueue = DispatchQueue(label: "dev.ua55.panel.sens.reader")
+    private let seedQueue = DispatchQueue(label: "dev.ua55.panel.sens.seed")
     private let lock = NSLock()
     private var connect: io_connect_t = 0
     private var left = 255
@@ -135,12 +141,14 @@ private final class SensFeed: @unchecked Sendable {
     func stop() {
         queue.async { [weak self] in
             guard let self else { return }
-            self.reader?.cancel()
-            self.reader = nil
+            self.readerQueue.sync {
+                self.reader?.cancel()
+                self.reader = nil
+                self.pending.removeAll()
+            }
             self.stream?.terminate()
             self.stream = nil
             self.leader = -1
-            self.pending.removeAll()
             if self.connect != 0 {
                 IOServiceClose(self.connect)
                 self.connect = 0
@@ -254,28 +262,70 @@ private final class SensFeed: @unchecked Sendable {
 
     private func startLog() {
         startStream()
-        seedFromShow()
+        seedQueue.async { [weak self] in
+            self?.reapStrayStreams()
+            self?.seedFromShow()
+        }
     }
 
-    private func seedFromShow() {
+    /// Lê a saída enquanto o processo roda. Esperar o fim antes de ler trava os dois.
+    private func captureOutput(executable: String, arguments: [String]) -> String? {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        process.arguments = [
-            "show", "--last", "10m", "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
-        ]
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
+        let box = OutputBox()
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            box.data = pipe.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
         do {
             try process.run()
         } catch {
-            PanelLog.write("sens show failed \(error.localizedDescription)")
-            return
+            try? pipe.fileHandleForWriting.close()
+            group.wait()
+            return nil
         }
         process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let text = String(data: data, encoding: .utf8) else { return }
+        group.wait()
+        return String(data: box.data, encoding: .utf8)
+    }
+
+    /// Cada abertura antiga deixava um `log stream` vivo. Eles entopem a leitura do knob.
+    private func reapStrayStreams() {
+        guard let text = captureOutput(executable: "/bin/ps", arguments: ["-ax", "-o", "pid=,command="]) else {
+            return
+        }
+        let own = stream?.processIdentifier ?? 0
+        var count = 0
+        for line in text.split(whereSeparator: \.isNewline) {
+            let row = String(line)
+            guard row.contains("log stream"), row.contains("[UA55] sens") else { continue }
+            guard let pid = Int32(row.split(whereSeparator: \.isWhitespace).first ?? ""), pid != own else { continue }
+            if kill(pid, SIGTERM) == 0 {
+                count += 1
+            }
+        }
+        if count > 0 {
+            PanelLog.write("sens stream reaped \(count)")
+        }
+    }
+
+    private func seedFromShow() {
+        guard let text = captureOutput(
+            executable: "/usr/bin/log",
+            arguments: [
+                "show", "--last", "10m", "--style", "compact",
+                "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
+            ]
+        ) else {
+            PanelLog.write("sens show failed")
+            return
+        }
         var applied = 0
         for line in text.split(whereSeparator: \.isNewline) {
             let text = String(line)
@@ -347,24 +397,16 @@ private final class SensFeed: @unchecked Sendable {
         stamp.timeZone = .current
         stamp.dateFormat = "yyyy-MM-dd HH:mm:ss"
         let start = stamp.string(from: cutoff.addingTimeInterval(-1))
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        process.arguments = [
-            "show", "--start", start, "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
-        ]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            PanelLog.write("state show failed \(error.localizedDescription)")
+        guard let text = captureOutput(
+            executable: "/usr/bin/log",
+            arguments: [
+                "show", "--start", start, "--style", "compact",
+                "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
+            ]
+        ) else {
+            PanelLog.write("state show failed")
             return false
         }
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let text = String(data: data, encoding: .utf8) else { return false }
         var found = false
         for line in text.split(whereSeparator: \.isNewline) {
             let text = String(line)
@@ -428,7 +470,7 @@ private final class SensFeed: @unchecked Sendable {
         close(replica)
         leader = primary
         stream = process
-        let source = DispatchSource.makeReadSource(fileDescriptor: primary, queue: queue)
+        let source = DispatchSource.makeReadSource(fileDescriptor: primary, queue: readerQueue)
         source.setEventHandler { [weak self] in
             self?.readStream()
         }
@@ -617,12 +659,13 @@ private final class SensFeed: @unchecked Sendable {
 
     /// O relógio do log compacto. Só a leitura desta conexão passa.
     private func isCurrentRead(_ message: String) -> Bool {
+        guard message.count >= 23 else { return false }
+        let stamp = String(message.prefix(23))
         lock.lock()
         let cutoff = readAfter
+        let when = logStamp.date(from: stamp)
         lock.unlock()
-        guard let cutoff, message.count >= 23 else { return false }
-        let stamp = String(message.prefix(23))
-        guard let when = logStamp.date(from: stamp) else { return false }
+        guard let cutoff, let when else { return false }
         return when >= cutoff
     }
 
