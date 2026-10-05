@@ -559,7 +559,7 @@ private final class SensFeed: @unchecked Sendable {
     /// Byte 24: bit 0 = PHASE 1, bit 1 = PHASE 2.
     /// SENS 1 e 2 são os bytes 25 e 26.
     /// BYPASS não entra aqui: cada canal chega na própria resposta 00 05 <canal> 06.
-    /// AUTO-SENS é o byte 21: 02 ligado, 00 desligado. Não devolve comando nenhum.
+    /// AUTO-SENS é o byte 21: 00 desligado. 02 é o clique; 01 é o giro do SENS. Os dois ligam.
     private func applySetup(_ message: String) -> Bool {
         guard let range = message.range(of: "[UA55] dt1 ") else { return false }
         let token = message[range.upperBound...].split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
@@ -594,7 +594,7 @@ private final class SensFeed: @unchecked Sendable {
         if sens2 <= 108 {
             right = min(Int(HardwareGain.sensMaxDb), Int(sens2) / 2)
         }
-        device = bytes[21] == 0x02 ? "on" : "off"
+        device = bytes[21] == 0x00 ? "off" : "on"
         buttonGen += 1
         return true
     }

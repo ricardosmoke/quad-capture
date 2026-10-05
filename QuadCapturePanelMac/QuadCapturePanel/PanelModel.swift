@@ -67,6 +67,7 @@ final class PanelModel: ObservableObject {
     private var sensHold = [false, false]
     private var sensQueuedStep = [-1, -1]
     private var sensInFlight = [false, false]
+    private var sensRefresh: DispatchWorkItem?
     private var sensEpoch = [0, 0]
     private var sensBaseline = [-1, -1]
     private var sensAccepted = [false, false]
@@ -304,6 +305,21 @@ final class PanelModel: ObservableObject {
         pumpSens(channel)
     }
 
+    /// A placa liga o AUTO-SENS ao receber o SENS. A leitura começa quando o giro para.
+    private func scheduleButtonRefreshAfterSens() {
+        sensRefresh?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if self.sensInFlight[0] || self.sensInFlight[1] {
+                self.scheduleButtonRefreshAfterSens()
+                return
+            }
+            self.refreshButtonsFromBoard()
+        }
+        sensRefresh = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
     private func displayedSensDb(_ channel: Int) -> Int {
         if channel == 0 {
             return sens1Known ? HardwareGain.db(fromNormalized: sens1) : -1
@@ -328,6 +344,7 @@ final class PanelModel: ObservableObject {
                 } else if self.sensQueuedStep[channel] == step {
                     self.sensAccepted[channel] = true
                     self.loCutStatus = ""
+                    self.scheduleButtonRefreshAfterSens()
                 }
                 if self.sensQueuedStep[channel] != step {
                     self.pumpSens(channel)
@@ -454,9 +471,14 @@ final class PanelModel: ObservableObject {
             comp2.gate = Double(step) / 50.0
             gateQueuedStep[1] = step
         }
+        let device = HardwareGain.deviceText()
+        if device == "on" || device == "off" {
+            autoSensText = device
+        }
     }
 
     func stop() {
+        sensRefresh?.cancel()
         cancellable?.invalidate()
         cancellable = nil
         HardwareGain.stop()
