@@ -62,7 +62,7 @@ enum LoCutMIDI {
         return nil
     }
 
-    /// BYPASS do compressor. O canal é o da placa: 1 é a faixa 1 da tela. 01 deixa o compressor em bypass.
+    /// BYPASS do compressor. O canal 0 é o BYPASS 1 da tela. O parâmetro on grava 01; no painel, 00 é o botão ligado.
     static func sendBypass(channel: UInt8, on: Bool) -> String? {
         guard channel <= 1 else { return "Falha ao enviar BYPASS" }
         let sysex = bypassMessage(channel: channel, on: on)

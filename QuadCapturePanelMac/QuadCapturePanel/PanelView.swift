@@ -87,18 +87,6 @@ struct PanelView: View {
             PanelLog.write("window disappear")
             model.stop()
         }
-        .alert("BYPASS da placa", isPresented: Binding(
-            get: { model.bypassReport != nil },
-            set: { shown in
-                if !shown {
-                    model.bypassReport = nil
-                }
-            }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.bypassReport ?? "")
-        }
     }
 }
 

@@ -60,7 +60,6 @@ final class PanelModel: ObservableObject {
     @Published var phase2 = false
     @Published var loCutStatus = ""
     @Published var linkOn = false
-    @Published var bypassReport: String?
     private var loCutBusy = false
     private var autoSensEpoch = 0
     private var sensHold = [false, false]
@@ -176,14 +175,20 @@ final class PanelModel: ObservableObject {
         }
     }
 
-    /// Faixa 1 da tela é o canal 1 da placa. 01 é bypass; 00 deixa o compressor ativo.
+    /// O BYPASS 1 da tela é o canal 0 da placa. 00 liga o botão e 01 desliga.
+    /// Com o LINK ligado, o outro BYPASS recebe o mesmo estado.
     func toggleBypass(channel: Int) {
         guard channel == 0 || channel == 1, !loCutBusy else { return }
         let turningOn = channel == 0 ? !comp1.bypass : !comp2.bypass
-        let deviceChannel: UInt8 = channel == 0 ? 1 : 0
+        let deviceChannel = UInt8(channel)
+        let follow = linkOn
+        let otherChannel = UInt8(channel == 0 ? 1 : 0)
         loCutBusy = true
         PanelWork.queue.async { [weak self] in
-            let error = LoCutMIDI.sendBypass(channel: deviceChannel, on: turningOn)
+            let error = LoCutMIDI.sendBypass(channel: deviceChannel, on: !turningOn)
+            let followError: String? = (error == nil && follow)
+                ? LoCutMIDI.sendBypass(channel: otherChannel, on: !turningOn)
+                : nil
             Task { @MainActor in
                 guard let self else { return }
                 if let error {
@@ -196,14 +201,22 @@ final class PanelModel: ObservableObject {
                 } else {
                     self.comp2.bypass = turningOn
                 }
+                if let followError {
+                    self.loCutBusy = false
+                    self.loCutStatus = followError
+                    return
+                }
+                if follow {
+                    self.comp1.bypass = turningOn
+                    self.comp2.bypass = turningOn
+                }
                 self.loCutStatus = ""
                 self.loCutBusy = false
-                self.refreshButtonsFromBoard()
             }
         }
     }
 
-    /// Um único LINK. O clique só envia o próprio parâmetro.
+    /// Um único LINK. Depois do envio, a placa devolve o estado de todos os botões.
     func toggleLink() {
         guard !loCutBusy else { return }
         let turningOn = !linkOn
@@ -419,9 +432,6 @@ final class PanelModel: ObservableObject {
 
     /// O DT1 de 59 bytes só escreve o desenho. Não passa pelos envios.
     private func applySetupSwitches() {
-        if let report = HardwareGain.takeBypassReport() {
-            bypassReport = report
-        }
         let shown = HardwareGain.preampSwitches()
         guard shown.generation != switchGen, !loCutBusy else { return }
         switchGen = shown.generation
