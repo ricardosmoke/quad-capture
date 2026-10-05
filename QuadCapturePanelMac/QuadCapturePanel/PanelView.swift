@@ -19,7 +19,14 @@ struct PanelView: View {
                 ForEach(PanelLayout.knobs.filter(\.interactive), id: \.id) { knob in
                     KnobHandle(
                         value: model.binding(for: knob.id),
-                        frame: layout.viewRect(for: knob.hit))
+                        frame: layout.viewRect(for: knob.hit),
+                        onActive: { active in
+                            if let index = knob.id.mixerIndex {
+                                model.setMixerDrag(index, active: active)
+                            } else if knob.id.isCompressor {
+                                model.setCompDrag(knob.id, active: active)
+                            }
+                        })
                 }
 
                 if rateMenuOpen {
@@ -188,6 +195,7 @@ struct PanelLayout {
 struct KnobHandle: View {
     @Binding var value: Double
     let frame: CGRect
+    var onActive: ((Bool) -> Void)?
     @State private var dragStartValue: Double?
 
     var body: some View {
@@ -201,6 +209,7 @@ struct KnobHandle: View {
                     .onChanged { drag in
                         if dragStartValue == nil {
                             dragStartValue = value
+                            onActive?(true)
                         }
                         let start = dragStartValue ?? value
                         // Arrastar para cima aumenta; para a direita também.
@@ -209,6 +218,7 @@ struct KnobHandle: View {
                     }
                     .onEnded { _ in
                         dragStartValue = nil
+                        onActive?(false)
                     }
             )
             .help("Arraste para ajustar")
@@ -330,9 +340,9 @@ extension PanelModel {
         case .comp2Attack: return Binding(get: { self.comp2.attack }, set: { self.setCompKnob(channel: 1, \.attack, $0) })
         case .comp2Release: return Binding(get: { self.comp2.release }, set: { self.setCompKnob(channel: 1, \.release, $0) })
         case .comp2Gain: return Binding(get: { self.comp2.gain }, set: { self.setCompKnob(channel: 1, \.gain, $0) })
-        case .mixOutput: return Binding(get: { self.mixOutput }, set: { self.mixOutput = $0 })
-        case .mixInput1: return Binding(get: { self.mixInput1 }, set: { self.mixInput1 = $0 })
-        case .mixInput2: return Binding(get: { self.mixInput2 }, set: { self.mixInput2 = $0 })
+        case .mixOutput: return Binding(get: { self.mixOutput }, set: { self.userSetMixer(index: 0, normalized: $0) })
+        case .mixInput1: return Binding(get: { self.mixInput1 }, set: { self.userSetMixer(index: 1, normalized: $0) })
+        case .mixInput2: return Binding(get: { self.mixInput2 }, set: { self.userSetMixer(index: 2, normalized: $0) })
         }
     }
 }
@@ -431,15 +441,16 @@ enum PanelCanvas {
     ) {
         frame(&context, x, y, w, h)
         title(&context, "COMPRESSOR", x, y + 6, w)
-        compStrip(&context, x + 10, y + 40, strip: state.comp1, gr: state.gr1, out: state.compOut1, outPeak: state.compOut1Peak)
+        compStrip(&context, x + 10, y + 40, strip: state.comp1, readouts: state.comp1Text, gr: state.gr1, out: state.compOut1, outPeak: state.compOut1Peak)
         button(&context, x + 10, y + 248, 70, 32, "LINK", gray: !state.linkOn)
-        compStrip(&context, x + 10, y + 286, strip: state.comp2, gr: state.gr2, out: state.compOut2, outPeak: state.compOut2Peak)
+        compStrip(&context, x + 10, y + 286, strip: state.comp2, readouts: state.comp2Text, gr: state.gr2, out: state.compOut2, outPeak: state.compOut2Peak)
     }
 
     private static func compStrip(
         _ context: inout GraphicsContext,
         _ x: CGFloat, _ y: CGFloat,
         strip: PanelModel.CompStrip,
+        readouts: [String],
         gr: CGFloat,
         out: CGFloat,
         outPeak: CGFloat
@@ -460,6 +471,10 @@ enum PanelCanvas {
             text(&context, labels[index], cx - 30, y + 138, 60, 14, 9, label, bold: false)
             knob(&context, cx, y + 180, 18, PanelModel.knobAngle(values[index]))
         }
+        for index in labels.indices where index < readouts.count {
+            let cx = x + 58 + CGFloat(index) * 62
+            mixerGain(&context, readouts[index], cx + 20, y + 172)
+        }
     }
 
     private static func mixer(
@@ -475,10 +490,23 @@ enum PanelCanvas {
             state.mixerOut1, peak: state.mixerOut1Peak, showClip: true,
             level2: state.mixerOut2, peak2: state.mixerOut2Peak)
         knob(&context, x + w / 2, y + 268, 22, PanelModel.knobAngle(state.mixOutput))
+        mixerGain(&context, state.mix1Text, x + w / 2 + 28, y + 260)
         text(&context, "INPUT 1", x, y + 294, w, 16, 12, label, bold: true)
         knob(&context, x + w / 2, y + 348, 22, PanelModel.knobAngle(state.mixInput1))
+        mixerGain(&context, state.mix2Text, x + w / 2 + 28, y + 340)
         text(&context, "INPUT 2", x, y + 374, w, 16, 12, label, bold: true)
         knob(&context, x + w / 2, y + 430, 22, PanelModel.knobAngle(state.mixInput2))
+        mixerGain(&context, state.mix3Text, x + w / 2 + 28, y + 422)
+        text(&context, "COAX (3/4)", x, y + 456, w, 16, 12, label, bold: true)
+    }
+
+    private static func mixerGain(
+        _ context: inout GraphicsContext,
+        _ value: String,
+        _ x: CGFloat, _ y: CGFloat
+    ) {
+        guard !value.isEmpty else { return }
+        text(&context, value, x, y, 64, 16, 11, ink, bold: true, left: true)
     }
 
     private static func footer(_ context: inout GraphicsContext, state: PanelModel.DrawState) {

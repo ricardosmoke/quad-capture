@@ -38,7 +38,7 @@ bool ParsePacket(const char* text, uint8_t* out, uint32_t capacity, uint32_t* le
         }
         hexLen++;
     }
-    if (hexLen != 40 && hexLen != 48) {
+    if (hexLen != 40 && hexLen != 48 && hexLen != 56) {
         return false;
     }
     const uint32_t count = hexLen / 2;
@@ -92,9 +92,9 @@ kern_return_t UA55LoCutProperty::HandleChangeCustomPropertyDataValueWithQualifie
 {
     (void)in_qualifier_data;
     auto* text = OSDynamicCast(OSString, in_data);
-    uint8_t packet[24];
+    uint8_t packet[28];
     uint32_t length = 0;
-    if (text == nullptr || !ParsePacket(text->getCStringNoCopy(), packet, 24, &length)) {
+    if (text == nullptr || !ParsePacket(text->getCStringNoCopy(), packet, 28, &length)) {
         return kIOReturnBadArgument;
     }
     if (ivars == nullptr) {

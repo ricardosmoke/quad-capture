@@ -16,6 +16,9 @@ struct PreampSwitches: Equatable {
     var link: Bool?
     var gate1: Int?
     var gate2: Int?
+    var mix1: Int?
+    var mix2: Int?
+    var mix3: Int?
 }
 
 enum HardwareGain {
@@ -109,6 +112,8 @@ private final class SensFeed: @unchecked Sendable {
     private var linkSeen = false
     private var gate: [Int?] = [nil, nil]
     private var gateSeen = [false, false]
+    private var mixer: [Int?] = [nil, nil, nil]
+    private var mixerSeen = [false, false, false]
     private var setupSeen = false
     private var buttonGen = 0
     private var collectGen = 0
@@ -185,6 +190,8 @@ private final class SensFeed: @unchecked Sendable {
         linkSeen = false
         gate = [nil, nil]
         gateSeen = [false, false]
+        mixer = [nil, nil, nil]
+        mixerSeen = [false, false, false]
         setupSeen = false
         device = "off"
         buttonGen += 1
@@ -223,7 +230,8 @@ private final class SensFeed: @unchecked Sendable {
             phase1: phase[0], phase2: phase[1],
             bypass1: bypass[0], bypass2: bypass[1],
             link: link,
-            gate1: gate[0], gate2: gate[1])
+            gate1: gate[0], gate2: gate[1],
+            mix1: mixer[0], mix2: mixer[1], mix3: mixer[2])
     }
 
     private func openUserClient() -> Bool {
@@ -320,7 +328,7 @@ private final class SensFeed: @unchecked Sendable {
             executable: "/usr/bin/log",
             arguments: [
                 "show", "--last", "10m", "--style", "compact",
-                "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
+                "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate" OR eventMessage CONTAINS "[UA55] mixer""#
             ]
         ) else {
             PanelLog.write("sens show failed")
@@ -333,6 +341,7 @@ private final class SensFeed: @unchecked Sendable {
             _ = applyBypassRead(text)
             _ = applyLinkRead(text)
             _ = applyGateRead(text)
+            _ = applyMixerRead(text)
             _ = applySetup(text)
             if apply(text) {
                 applied += 1
@@ -367,6 +376,7 @@ private final class SensFeed: @unchecked Sendable {
             let bypassOk = bypassSeen[0] && bypassSeen[1]
             let linkOk = linkSeen
             let gateOk = gateSeen[0] && gateSeen[1]
+            let mixerOk = mixerSeen[0] && mixerSeen[1] && mixerSeen[2]
             lock.unlock()
             if !setup {
                 PanelLog.write("state read missed")
@@ -376,6 +386,8 @@ private final class SensFeed: @unchecked Sendable {
                 PanelLog.write("link read missed")
             } else if !gateOk {
                 PanelLog.write("gate read missed")
+            } else if !mixerOk {
+                PanelLog.write("mixer read missed")
             }
             return
         }
@@ -401,7 +413,7 @@ private final class SensFeed: @unchecked Sendable {
             executable: "/usr/bin/log",
             arguments: [
                 "show", "--start", start, "--style", "compact",
-                "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
+                "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate" OR eventMessage CONTAINS "[UA55] mixer""#
             ]
         ) else {
             PanelLog.write("state show failed")
@@ -423,6 +435,10 @@ private final class SensFeed: @unchecked Sendable {
                 let shown = switches()
                 PanelLog.write("gate read g1=\(shown.gate1 ?? -1) g2=\(shown.gate2 ?? -1)")
             }
+            if applyMixerRead(text) {
+                let shown = switches()
+                PanelLog.write("mixer read m1=\(shown.mix1 ?? -1) m2=\(shown.mix2 ?? -1) m3=\(shown.mix3 ?? -1)")
+            }
             if applySetup(text) {
                 found = true
             }
@@ -436,8 +452,9 @@ private final class SensFeed: @unchecked Sendable {
         let bypassOk = bypassSeen[0] && bypassSeen[1]
         let linkOk = linkSeen
         let gateOk = gateSeen[0] && gateSeen[1]
+        let mixerOk = mixerSeen[0] && mixerSeen[1] && mixerSeen[2]
         lock.unlock()
-        return found && bypassOk && linkOk && gateOk
+        return found && bypassOk && linkOk && gateOk && mixerOk
     }
 
     private func startStream() {
@@ -451,7 +468,7 @@ private final class SensFeed: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
         process.arguments = [
             "stream", "--style", "compact",
-            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate""#
+            "--predicate", #"eventMessage CONTAINS "[UA55] sens" OR eventMessage CONTAINS "[UA55] autosens" OR eventMessage CONTAINS "[UA55] dt1" OR eventMessage CONTAINS "[UA55] bypass" OR eventMessage CONTAINS "[UA55] link" OR eventMessage CONTAINS "[UA55] gate" OR eventMessage CONTAINS "[UA55] mixer""#
         ]
         let output = FileHandle(fileDescriptor: replica, closeOnDealloc: false)
         process.standardOutput = output
@@ -508,6 +525,10 @@ private final class SensFeed: @unchecked Sendable {
             if applyGateRead(text) {
                 let shown = switches()
                 PanelLog.write("gate read g1=\(shown.gate1 ?? -1) g2=\(shown.gate2 ?? -1)")
+            }
+            if applyMixerRead(text) {
+                let shown = switches()
+                PanelLog.write("mixer read m1=\(shown.mix1 ?? -1) m2=\(shown.mix2 ?? -1) m3=\(shown.mix3 ?? -1)")
             }
             if applySetup(text) {
                 let shown = switches()
@@ -633,6 +654,30 @@ private final class SensFeed: @unchecked Sendable {
         }
         linkSeen = true
         link = value == 1
+        buttonGen += 1
+        return true
+    }
+
+    /// A primeira resposta 00 06 <índice> 08 desta conexão. A amplitude vira a posição 0...1024.
+    private func applyMixerRead(_ message: String) -> Bool {
+        guard isCurrentRead(message) else { return false }
+        guard let marker = message.range(of: "[UA55] mixer read ") else { return false }
+        let parts = message[marker.upperBound...].split(whereSeparator: \.isWhitespace)
+        guard parts.count >= 2,
+              let index = Int(parts[0]),
+              let amplitude = Int(parts[1]),
+              index <= 2,
+              amplitude >= 0,
+              amplitude <= 0x7FFFFF else {
+            return false
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        if mixerSeen[index] {
+            return false
+        }
+        mixerSeen[index] = true
+        mixer[index] = MixerLevel.position(matching: amplitude)
         buttonGen += 1
         return true
     }

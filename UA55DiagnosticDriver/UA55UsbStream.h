@@ -57,6 +57,7 @@ public:
     // O BYPASS de cada canal é um RQ1 de 1 byte em 00 05 <canal> 06.
     // O LINK é um RQ1 de 1 byte em 00 05 00 05.
     // O GATE de cada canal é um RQ1 de 1 byte em 00 05 <canal> 07.
+    // O monitor do mixer é um RQ1 de 6 bytes em 00 06 <índice> 08.
     kern_return_t SendMidi(const uint8_t* bytes, uint32_t length);
     // 255 = esse canal ainda não chegou. Leitura lock-free para o user client.
     void CopySens(uint8_t* left, uint8_t* right) const;

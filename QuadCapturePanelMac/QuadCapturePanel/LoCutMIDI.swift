@@ -345,6 +345,32 @@ enum LoCutMIDI {
         return nil
     }
 
+    /// Seis nibbles em 00 06 <índice> 08. A resposta só move o knob. Não devolve DT1.
+    static func requestMixer(index: UInt8) -> String? {
+        guard index <= 2 else { return "Falha ao ler o MIXER" }
+        let sysex = mixerRequest(index: index)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("mixer rq1 idx=\(index)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao ler o MIXER (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("mixer rq1 idx=\(index)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao ler o MIXER (\(status))"
+        }
+        return nil
+    }
+
     /// Um byte em 00 05 <canal> 07. Faixa 1 é o canal 0. A resposta só move o knob.
     static func requestGate(channel: UInt8) -> String? {
         guard channel <= 1 else { return "Falha ao ler o GATE" }
@@ -418,6 +444,33 @@ enum LoCutMIDI {
                 return "QUAD-CAPTURE não encontrada"
             }
             return "Falha ao enviar SENS (\(status))"
+        }
+        return nil
+    }
+
+    /// Monitor do mixer. Índice 0 é INPUT 1, 1 é INPUT 2, 2 é COAX. A posição vai de 0 a 1024.
+    static func sendMixer(index: UInt8, position: Int) -> String? {
+        guard index <= 2, position >= 0, position <= 1024 else { return "Falha ao enviar MIXER" }
+        let amplitude = MixerLevel.amplitude(at: position)
+        let sysex = mixerMessage(index: index, amplitude: amplitude)
+        if let target = findTarget() {
+            let bytes = target.wrapCable ? usbPackets(cable: 1, sysex: sysex) : sysex
+            let status = transmit(bytes, to: target.endpoint)
+            logFixed("mixer idx=\(index) pos=\(position) amp=\(amplitude)", dest: target.name, wrap: target.wrapCable, status: status, bytes: bytes)
+            if status != noErr {
+                return "Falha ao enviar MIXER (\(status))"
+            }
+            return nil
+        }
+
+        let packets = usbPackets(cable: 1, sysex: sysex)
+        let status = sendToDriver(packets)
+        logFixed("mixer idx=\(index) pos=\(position) amp=\(amplitude)", dest: "driver", wrap: true, status: status, bytes: packets)
+        if status != noErr {
+            if status == kAudioHardwareBadDeviceError {
+                return "QUAD-CAPTURE não encontrada"
+            }
+            return "Falha ao enviar MIXER (\(status))"
         }
         return nil
     }
@@ -541,6 +594,23 @@ enum LoCutMIDI {
         let total = 0x01 + 0x00 + 0x00 + 0x00 + 0x00 + 0x00 + 0x00 + 0x3B
         let sum = UInt8((0 - total) & 0x7F)
         return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3B, sum, 0xF7]
+    }
+
+    /// RQ1 de 6 bytes em 00 06 <índice> 08. O checksum é (0 - soma) & 0x7F sobre o endereço e o tamanho.
+    private static func mixerRequest(index: UInt8) -> [UInt8] {
+        let total = 0x00 + 0x06 + Int(index) + 0x08 + 0x00 + 0x00 + 0x00 + 0x06
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x11, 0x00, 0x06, index, 0x08, 0x00, 0x00, 0x00, 0x06, sum, 0xF7]
+    }
+
+    /// DT1 00 06 <índice> 08 mais 6 nibbles da amplitude de 24 bits.
+    private static func mixerMessage(index: UInt8, amplitude: Int) -> [UInt8] {
+        let nibbles = (0..<6).map { shift in
+            UInt8((amplitude >> ((5 - shift) * 4)) & 0x0F)
+        }
+        let total = 0x00 + 0x06 + Int(index) + 0x08 + nibbles.reduce(0) { $0 + Int($1) }
+        let sum = UInt8((0 - total) & 0x7F)
+        return [0xF0, 0x41, 0x10, 0x00, 0x00, 0x56, 0x12, 0x00, 0x06, index, 0x08] + nibbles + [sum, 0xF7]
     }
 
     private static func sensMessage(channel: UInt8, step: UInt8) -> [UInt8] {

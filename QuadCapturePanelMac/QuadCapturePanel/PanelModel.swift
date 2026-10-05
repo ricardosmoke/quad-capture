@@ -34,6 +34,11 @@ final class PanelModel: ObservableObject {
         var mixOutput: Double = 0.7
         var mixInput1: Double = 0.65
         var mixInput2: Double = 0.65
+        var mix1Text: String = ""
+        var mix2Text: String = ""
+        var mix3Text: String = ""
+        var comp1Text: [String] = ["", "", "", "", "", ""]
+        var comp2Text: [String] = ["", "", "", "", "", ""]
         var pre1: CGFloat = 0
         var pre1Peak: CGFloat = 0
         var pre2: CGFloat = 0
@@ -68,6 +73,8 @@ final class PanelModel: ObservableObject {
     private var sensQueuedStep = [-1, -1]
     private var sensInFlight = [false, false]
     private var sensRefresh: DispatchWorkItem?
+    private var mixerQueued = [-1, -1, -1]
+    private var mixerInFlight = [false, false, false]
     private var sensEpoch = [0, 0]
     private var sensBaseline = [-1, -1]
     private var sensAccepted = [false, false]
@@ -92,6 +99,8 @@ final class PanelModel: ObservableObject {
     @Published var mixInput1: Double = 0.65
     @Published var mixInput2: Double = 0.65
     @Published var mixCoax: Double = 0.4
+    @Published private var mixerDragIndex: Int?
+    @Published private var compDrag: KnobID?
     @Published var levels = InputLevelMonitor.Snapshot()
 
     private let monitor = InputLevelMonitor()
@@ -118,6 +127,11 @@ final class PanelModel: ObservableObject {
         s.mixOutput = mixOutput
         s.mixInput1 = mixInput1
         s.mixInput2 = mixInput2
+        s.mix1Text = mixerDragIndex == 0 ? MixerLevel.display(normalized: mixOutput) : ""
+        s.mix2Text = mixerDragIndex == 1 ? MixerLevel.display(normalized: mixInput1) : ""
+        s.mix3Text = mixerDragIndex == 2 ? MixerLevel.display(normalized: mixInput2) : ""
+        s.comp1Text = CompReadout.row(comp1, drag: compDrag, channel: 0)
+        s.comp2Text = CompReadout.row(comp2, drag: compDrag, channel: 1)
         s.pre1 = preampLevel(0)
         s.pre1Peak = preampPeak(0)
         s.pre2 = preampLevel(1)
@@ -272,6 +286,61 @@ final class PanelModel: ObservableObject {
         refreshButtonsFromBoard()
     }
 
+    /// O número ao lado do knob do compressor aparece só enquanto o usuário segura o giro.
+    func setCompDrag(_ id: KnobID, active: Bool) {
+        if active {
+            compDrag = id
+        } else if compDrag == id {
+            compDrag = nil
+        }
+    }
+
+    /// O número ao lado do knob aparece só enquanto o usuário segura o giro.
+    func setMixerDrag(_ index: Int, active: Bool) {
+        if active {
+            mixerDragIndex = index
+        } else if mixerDragIndex == index {
+            mixerDragIndex = nil
+        }
+    }
+
+    /// O knob de cima é INPUT 1, o do meio é INPUT 2 e o de baixo é COAX. Só o giro do usuário envia.
+    func userSetMixer(index: Int, normalized: Double) {
+        guard index >= 0, index <= 2 else { return }
+        let clamped = min(1, max(0, normalized))
+        switch index {
+        case 0: mixOutput = clamped
+        case 1: mixInput1 = clamped
+        default: mixInput2 = clamped
+        }
+        let position = MixerLevel.position(from: clamped)
+        if mixerQueued[index] == position { return }
+        mixerQueued[index] = position
+        pumpMixer(index)
+    }
+
+    private func pumpMixer(_ index: Int) {
+        guard !mixerInFlight[index] else { return }
+        let position = mixerQueued[index]
+        guard position >= 0 else { return }
+        mixerInFlight[index] = true
+        PanelWork.queue.async { [weak self] in
+            let error = LoCutMIDI.sendMixer(index: UInt8(index), position: position)
+            Task { @MainActor in
+                guard let self else { return }
+                self.mixerInFlight[index] = false
+                if let error {
+                    self.loCutStatus = error
+                } else if self.mixerQueued[index] == position {
+                    self.loCutStatus = ""
+                }
+                if self.mixerQueued[index] != position {
+                    self.pumpMixer(index)
+                }
+            }
+        }
+    }
+
     /// Arraste do knob. O passo é o dB mostrado vezes 2. A leitura da placa não passa por aqui.
     func userSetSens(channel: Int, normalized: Double) {
         guard channel == 0 || channel == 1 else { return }
@@ -397,11 +466,11 @@ final class PanelModel: ObservableObject {
         guard !stateRequested else { return }
         stateRequested = true
         showButtonsOff()
-        requestBoardButtons()
+        requestBoardButtons(includeMixer: true)
     }
 
     /// O mesmo pedido da abertura: bloco de 59 bytes, os dois BYPASS e o LINK.
-    private func requestBoardButtons() {
+    private func requestBoardButtons(includeMixer: Bool = false) {
         PanelWork.queue.async { [weak self] in
             let error = LoCutMIDI.requestState()
             let bypassError = error == nil ? LoCutMIDI.requestBypass(channel: 0) : nil
@@ -409,6 +478,15 @@ final class PanelModel: ObservableObject {
             let linkError = error == nil ? LoCutMIDI.requestLink() : nil
             let gateError = error == nil ? LoCutMIDI.requestGate(channel: 0) : nil
             let gateError2 = error == nil ? LoCutMIDI.requestGate(channel: 1) : nil
+            var mixerError: String?
+            if includeMixer, error == nil {
+                for index in UInt8(0)...2 {
+                    if let failed = LoCutMIDI.requestMixer(index: index) {
+                        mixerError = failed
+                        break
+                    }
+                }
+            }
             if error == nil {
                 HardwareGain.collectState()
             }
@@ -426,6 +504,8 @@ final class PanelModel: ObservableObject {
                     self.loCutStatus = gateError
                 } else if let gateError2 {
                     self.loCutStatus = gateError2
+                } else if let mixerError {
+                    self.loCutStatus = mixerError
                 }
             }
         }
@@ -451,6 +531,18 @@ final class PanelModel: ObservableObject {
         HardwareGain.beginRead()
     }
 
+    /// A leitura da conexão posiciona o knob. Não devolve a amplitude para a placa.
+    private func applyLoadedMixer(_ index: Int, _ position: Int?) {
+        guard let position, mixerDragIndex != index, !mixerInFlight[index] else { return }
+        let normalized = Double(position) / 1024.0
+        switch index {
+        case 0: mixOutput = normalized
+        case 1: mixInput1 = normalized
+        default: mixInput2 = normalized
+        }
+        mixerQueued[index] = position
+    }
+
     /// O DT1 de 59 bytes só escreve o desenho. Não passa pelos envios.
     private func applySetupSwitches() {
         let shown = HardwareGain.preampSwitches()
@@ -471,6 +563,9 @@ final class PanelModel: ObservableObject {
             comp2.gate = Double(step) / 50.0
             gateQueuedStep[1] = step
         }
+        applyLoadedMixer(0, shown.mix1)
+        applyLoadedMixer(1, shown.mix2)
+        applyLoadedMixer(2, shown.mix3)
         let device = HardwareGain.deviceText()
         if device == "on" || device == "off" {
             autoSensText = device
@@ -822,4 +917,75 @@ enum KnobID: Hashable {
     case comp1Gate, comp1Threshold, comp1Ratio, comp1Attack, comp1Release, comp1Gain
     case comp2Gate, comp2Threshold, comp2Ratio, comp2Attack, comp2Release, comp2Gain
     case mixOutput, mixInput1, mixInput2
+
+    var mixerIndex: Int? {
+        switch self {
+        case .mixOutput: return 0
+        case .mixInput1: return 1
+        case .mixInput2: return 2
+        default: return nil
+        }
+    }
+
+    var isCompressor: Bool {
+        switch self {
+        case .comp1Gate, .comp1Threshold, .comp1Ratio, .comp1Attack, .comp1Release, .comp1Gain,
+             .comp2Gate, .comp2Threshold, .comp2Ratio, .comp2Attack, .comp2Release, .comp2Gain:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+/// Valor mostrado à direita do knob do compressor. Usa o mesmo passo que o envio.
+enum CompReadout {
+    private static let ratio = ["1:1.0", "1:1.2", "1:1.5", "1:2.0", "1:2.8", "1:4.0", "1:8.0", "1:16", "1:INF"]
+    private static let attack = [0.2, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+    private static let release = [10, 12, 15, 18, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500]
+
+    static func row(_ strip: PanelModel.CompStrip, drag: KnobID?, channel: Int) -> [String] {
+        let ids: [KnobID] = channel == 0
+            ? [.comp1Gate, .comp1Threshold, .comp1Ratio, .comp1Attack, .comp1Release, .comp1Gain]
+            : [.comp2Gate, .comp2Threshold, .comp2Ratio, .comp2Attack, .comp2Release, .comp2Gain]
+        let values = [strip.gate, strip.threshold, strip.ratio, strip.attack, strip.release, strip.gain]
+        return zip(ids, values).map { id, value in
+            drag == id ? text(id, value) : ""
+        }
+    }
+
+    private static func text(_ id: KnobID, _ normalized: Double) -> String {
+        switch id {
+        case .comp1Gate, .comp2Gate:
+            let step = step(normalized, max: 50)
+            return step == 0 ? "-INF" : String(format: "%.1f", Double(step - 70))
+        case .comp1Threshold, .comp2Threshold:
+            return decibels(step(normalized, max: 50) - 50)
+        case .comp1Ratio, .comp2Ratio:
+            return ratio[step(normalized, max: 8)]
+        case .comp1Attack, .comp2Attack:
+            return milliseconds(attack[step(normalized, max: 25)])
+        case .comp1Release, .comp2Release:
+            return "\(release[step(normalized, max: 45)]) ms"
+        case .comp1Gain, .comp2Gain:
+            return decibels(step(normalized, max: 74) - 50)
+        default:
+            return ""
+        }
+    }
+
+    private static func step(_ normalized: Double, max upper: Int) -> Int {
+        min(upper, max(0, Int((min(1, max(0, normalized)) * Double(upper)).rounded())))
+    }
+
+    private static func decibels(_ value: Int) -> String {
+        if value > 0 { return String(format: "+%.1f", Double(value)) }
+        if value == 0 { return "0.0" }
+        return String(format: "%.1f", Double(value))
+    }
+
+    private static func milliseconds(_ value: Double) -> String {
+        if value < 10 { return String(format: "%.1f ms", value) }
+        return String(format: "%.0f ms", value)
+    }
 }
