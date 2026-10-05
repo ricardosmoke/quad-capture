@@ -44,8 +44,10 @@ final class PanelModel: ObservableObject {
         var compOut1Peak: CGFloat = 0
         var compOut2: CGFloat = 0
         var compOut2Peak: CGFloat = 0
-        var mixerOut: CGFloat = 0
-        var mixerOutPeak: CGFloat = 0
+        var mixerOut1: CGFloat = 0
+        var mixerOut1Peak: CGFloat = 0
+        var mixerOut2: CGFloat = 0
+        var mixerOut2Peak: CGFloat = 0
         var sampleRateText: String = "—"
     }
 
@@ -125,8 +127,10 @@ final class PanelModel: ObservableObject {
         s.compOut1Peak = compOutPeak(comp1, channel: 0)
         s.compOut2 = compOutLevel(comp2, channel: 1)
         s.compOut2Peak = compOutPeak(comp2, channel: 1)
-        s.mixerOut = mixerOutputLevel
-        s.mixerOutPeak = mixerOutputPeak
+        s.mixerOut1 = mixerOutput(0, peak: false)
+        s.mixerOut1Peak = mixerOutput(0, peak: true)
+        s.mixerOut2 = mixerOutput(1, peak: false)
+        s.mixerOut2Peak = mixerOutput(1, peak: true)
         s.sampleRateText = UA55Device.label(for: levels.sampleRateHz)
         return s
     }
@@ -779,21 +783,14 @@ final class PanelModel: ObservableObject {
         return min(1, afterGR * makeup)
     }
 
-    var mixerOutputLevel: CGFloat {
-        let i1 = preampLevel(0) * CGFloat(mixInput1)
-        let i2 = preampLevel(1) * CGFloat(mixInput2)
-        let coaxL = (levels.levels.count > 2 ? levels.levels[2] : 0) * CGFloat(mixCoax)
-        let coaxR = (levels.levels.count > 3 ? levels.levels[3] : 0) * CGFloat(mixCoax)
-        let mixed = max(i1, i2, coaxL, coaxR)
-        return min(1, mixed * CGFloat(0.5 + mixOutput * 0.7))
-    }
-
-    var mixerOutputPeak: CGFloat {
-        let i1 = preampPeak(0) * CGFloat(mixInput1)
-        let i2 = preampPeak(1) * CGFloat(mixInput2)
-        let coaxL = (levels.peaks.count > 2 ? levels.peaks[2] : 0) * CGFloat(mixCoax)
-        let coaxR = (levels.peaks.count > 3 ? levels.peaks[3] : 0) * CGFloat(mixCoax)
-        let mixed = max(i1, i2, coaxL, coaxR)
+    /// Output 1 segue a entrada 1. Output 2 segue a entrada 2.
+    private func mixerOutput(_ channel: Int, peak: Bool) -> CGFloat {
+        let input = peak ? preampPeak(channel) : preampLevel(channel)
+        let knob: Double = channel == 0 ? mixInput1 : mixInput2
+        let coaxIndex = 2 + channel
+        let source = peak ? levels.peaks : levels.levels
+        let coax = (source.count > coaxIndex ? source[coaxIndex] : 0) * CGFloat(mixCoax)
+        let mixed = max(input * CGFloat(knob), coax)
         return min(1, mixed * CGFloat(0.5 + mixOutput * 0.7))
     }
 }

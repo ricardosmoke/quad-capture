@@ -470,7 +470,10 @@ enum PanelCanvas {
         frame(&context, x, y, w, h)
         title(&context, "MIXER", x, y + 6, w)
         text(&context, "OUTPUT 1-2", x, y + 42, w, 16, 12, label, bold: true)
-        meter(&context, x + w / 2 - 20, y + 64, 150, state.mixerOut, peak: state.mixerOutPeak, showClip: true)
+        meter(
+            &context, x + w / 2 - 36, y + 64, 150,
+            state.mixerOut1, peak: state.mixerOut1Peak, showClip: true,
+            level2: state.mixerOut2, peak2: state.mixerOut2Peak)
         knob(&context, x + w / 2, y + 268, 22, PanelModel.knobAngle(state.mixOutput))
         text(&context, "INPUT 1", x, y + 294, w, 16, 12, label, bold: true)
         knob(&context, x + w / 2, y + 348, 22, PanelModel.knobAngle(state.mixInput1))
@@ -552,12 +555,31 @@ enum PanelCanvas {
     private static func meter(
         _ context: inout GraphicsContext,
         _ x: CGFloat, _ y: CGFloat, _ h: CGFloat,
-        _ level: CGFloat, peak: CGFloat, showClip: Bool
+        _ level: CGFloat, peak: CGFloat, showClip: Bool,
+        level2: CGFloat? = nil, peak2: CGFloat? = nil
     ) {
         let labels = showClip
             ? ["CLIP", "0", "-2", "-6", "-12", "-24", "-48"]
             : ["0", "-2", "-6", "-12", "-24", "-48"]
         let trackX = x + 36
+        drawMeterTrack(&context, trackX, y, h, level, peak: peak)
+        if let level2 {
+            drawMeterTrack(&context, trackX + 16, y, h, level2, peak: peak2 ?? level2)
+            text(&context, "1", trackX - 2, y + h, 16, 12, 8, label, bold: true)
+            text(&context, "2", trackX + 14, y + h, 16, 12, 8, label, bold: true)
+        }
+
+        for index in labels.indices {
+            let ly = y + CGFloat(index) * ((h - 10) / CGFloat(labels.count - 1))
+            text(&context, labels[index], x, ly - 6, 34, 12, 8, label, bold: false)
+        }
+    }
+
+    private static func drawMeterTrack(
+        _ context: inout GraphicsContext,
+        _ trackX: CGFloat, _ y: CGFloat, _ h: CGFloat,
+        _ level: CGFloat, peak: CGFloat
+    ) {
         fill(&context, rect(trackX, y, 12, h, radius: 2), Color(hex: 0x101010))
 
         let clamped = min(max(level, 0), 1)
@@ -574,11 +596,6 @@ enum PanelCanvas {
         let peakClamped = min(max(max(peak, level), 0), 1)
         let peakY = y + h - 2 - peakClamped * (h - 4)
         strokeLine(&context, trackX + 1, peakY, trackX + 11, peakY, clock, 2)
-
-        for index in labels.indices {
-            let ly = y + CGFloat(index) * ((h - 10) / CGFloat(labels.count - 1))
-            text(&context, labels[index], x, ly - 6, 34, 12, 8, label, bold: false)
-        }
     }
 
     /// Visor do compressor. O quadrado é só a grade; a escala -60…0 fica
