@@ -1,21 +1,21 @@
-# Referência Linux
+# Linux reference
 
-Fonte consultada: `sound/usb/quirks-table.h` no ramo principal do kernel, entrada `USB_DEVICE(0x0582, 0x012f)`. Isso é quirk do ALSA, não um dump do configuration descriptor deste aparelho. O driver macOS não copia esses números.
+Source: `sound/usb/quirks-table.h` on the kernel mainline, entry `USB_DEVICE(0x0582, 0x012f)`. This is an ALSA quirk, not a dump of this unit's configuration descriptor. The macOS driver does not copy those numbers.
 
-Resumo da entrada que limita o dispositivo a 44.1 kHz:
+Summary of the entry that limits the device to 44.1 kHz:
 
-| Interface | Papel no quirk | Alternate | Endpoint | Atributo | Formato declarado |
+| Interface | Role in the quirk | Alternate | Endpoint | Attribute | Declared format |
 | --- | --- | --- | --- | --- | --- |
-| 0 | áudio fixo | 1 | `0x05` | `0x05` | S32_LE, 4 canais, 44100 |
-| 1 | áudio fixo | 1 | `0x85` | `0x25` | S32_LE, 6 canais, 44100 |
-| 2 | MIDI fixo | — | cabos in/out `0x0001` | — | um cabo em cada direção |
-| 3 | ignorada | — | — | — | — |
-| 4 | ignorada | — | — | — | — |
+| 0 | fixed audio | 1 | `0x05` | `0x05` | S32_LE, 4 channels, 44100 |
+| 1 | fixed audio | 1 | `0x85` | `0x25` | S32_LE, 6 channels, 44100 |
+| 2 | fixed MIDI | — | in/out cables `0x0001` | — | one cable each way |
+| 3 | ignored | — | — | — | — |
+| 4 | ignored | — | — | — | — |
 
 URL: https://github.com/torvalds/linux/blob/master/sound/usb/quirks-table.h
 
-Patches posteriores, ainda não tratados como comportamento deste hardware, descrevem alternate settings 2, 3 e 4 para 48, 96 e 192 kHz e uma request vendor de clock também associada à OCTA-CAPTURE `0582:0120`. Este projeto não envia essa request e não faz match de `0x0120`.
+Later patches describe alternate settings 2, 3, and 4 for 48, 96, and 192 kHz, and a vendor clock request also associated with the OCTA-CAPTURE `0582:0120`. This driver sends that clock request (vendor request 3) for the QUAD-CAPTURE and does not match `0x0120`.
 
-MultiRolandDriver reconhece o PID `0x012F` e declara que, nesse composto áudio+MIDI, reivindica só a interface MIDI. Não é implementação de áudio da QUAD-CAPTURE.
+MultiRolandDriver recognizes PID `0x012F` and states that, on that audio+MIDI composite, it claims only the MIDI interface. It is not a QUAD-CAPTURE audio implementation.
 
-Uso permitido destes dados: comparar, depois, com as linhas `[UA55] interface` e `[UA55] endpoint` lidas do aparelho. Enquanto essa comparação não existir, endpoint, alternate setting e canal continuam hipótese.
+Allowed use of this data: compare it with the `[UA55] interface` and `[UA55] endpoint` lines read from the unit. That comparison is recorded in [HYPOTHESES.md](HYPOTHESES.md).

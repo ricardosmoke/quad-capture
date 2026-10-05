@@ -1,40 +1,40 @@
 # Entitlements
 
-Os arquivos assinados são a fonte do que o binário pode fazer.
+The signed files are what the binary is allowed to do.
 
 ## Dext — `UA55DiagnosticDriver/UA55DiagnosticDriver.entitlements`
 
-| Chave | Valor | Motivo |
+| Key | Value | Why |
 | --- | --- | --- |
-| `com.apple.developer.driverkit` | `true` | Permite carregar a dext |
+| `com.apple.developer.driverkit` | `true` | Allows the dext to load |
 | `com.apple.developer.driverkit.family.audio` | `true` | AudioDriverKit / Core Audio HAL |
-| `com.apple.developer.driverkit.transport.usb` | vendor `*` | Abre o dispositivo USB (mesmo padrão validado no marco 3) |
+| `com.apple.developer.driverkit.transport.usb` | vendor `*` | Opens the USB device (same pattern validated in milestone 3) |
 
-No portal/Xcode: capability **DriverKit Family Audio** no App ID do driver, além de DriverKit e USB Transport. Regenere o profile depois de adicionar a capability — o mesmo padrão do entitlement USB.
+In the portal and in Xcode: the **DriverKit Family Audio** capability on the driver App ID, in addition to DriverKit and USB Transport. Regenerate the profile after adding the capability — the same pattern as the USB entitlement.
 
-Não há `com.apple.developer.driverkit.allow-any-userclient-access`. O user client de áudio é criado pelo AudioDriverKit para o host Core Audio.
+There is no `com.apple.developer.driverkit.allow-any-userclient-access`. AudioDriverKit creates the audio user client for the Core Audio host.
 
 ## App — `UA55DiagnosticApp/UA55DiagnosticApp.entitlements`
 
-| Chave | Valor | Motivo |
+| Key | Value | Why |
 | --- | --- | --- |
-| `com.apple.developer.system-extension.install` | `true` | `OSSystemExtensionRequest` ativa a dext embutida |
-| `com.apple.security.app-sandbox` | `true` | O app só instala a extensão e mostra instruções |
+| `com.apple.developer.system-extension.install` | `true` | `OSSystemExtensionRequest` activates the embedded dext |
+| `com.apple.security.app-sandbox` | `true` | The app only installs the extension and shows instructions |
 
-## Personalidade IOKit
+## IOKit personality
 
 `UA55DiagnosticDriver/Info.plist`:
 
 - `IOProviderClass` = `IOUSBHostDevice`
 - `IOUserClass` = `UA55AudioDriver`
-- `IOUserServerName` = bundle ID da dext (`dev.ua55.UA55DiagnosticApp.driver`)
+- `IOUserServerName` = dext bundle ID (`dev.ua55.UA55DiagnosticApp.driver`)
 - `IOUserAudioDriverUserClientProperties` → `IOUserAudioDriverUserClient`
 - `idVendor` = `1410`, `idProduct` = `303`
 
-## Conferir assinatura
+## Check the signature
 
 ```bash
 codesign -d --entitlements :- /Applications/UA55DiagnosticApp.app/Contents/Library/SystemExtensions/dev.ua55.UA55DiagnosticApp.driver.dext
 ```
 
-Se `family.audio` não aparecer no binário, o dext falha no launch (mesmo padrão do `transport.usb`).
+If `family.audio` is missing from the binary, the dext fails at launch (the same pattern as `transport.usb`).

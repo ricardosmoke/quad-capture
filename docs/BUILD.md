@@ -1,44 +1,44 @@
-# Compilar e instalar
+# Build and install
 
-O dext só compila no Xcode, em Mac Apple Silicon, com o SDK DriverKit.
+The dext builds only in Xcode, on an Apple Silicon Mac, with the DriverKit SDK.
 
-## Conta e capabilities
+## Account and capabilities
 
-1. Abra `UA55Diagnostic.xcodeproj`.
-2. No alvo `UA55DiagnosticApp` e no alvo `UA55DiagnosticDriver`, escolha o mesmo Team.
-3. No portal de desenvolvedor, o App ID do driver precisa de:
+1. Open `UA55Diagnostic.xcodeproj`.
+2. On the `UA55DiagnosticApp` target and the `UA55DiagnosticDriver` target, select the same Team.
+3. In the developer portal, the driver App ID needs:
    - DriverKit
-   - DriverKit USB Transport (no entitlement atual: `idVendor=*`)
+   - DriverKit USB Transport (current entitlement: `idVendor=*`)
    - **DriverKit Family Audio** (`com.apple.developer.driverkit.family.audio`)
-4. O App ID do aplicativo precisa de System Extension.
-5. Regenere o provisioning profile do driver depois de adicionar Family Audio. Os identifiers atuais são:
+4. The application App ID needs System Extension.
+5. Regenerate the driver provisioning profile after adding Family Audio. The current identifiers are:
    - App: `dev.ua55.UA55DiagnosticApp`
    - Driver: `dev.ua55.UA55DiagnosticApp.driver`
 
-`IOUserServerName` na `Info.plist` usa `$(PRODUCT_BUNDLE_IDENTIFIER)` e precisa continuar igual ao bundle ID da dext.
+`IOUserServerName` in `Info.plist` uses `$(PRODUCT_BUNDLE_IDENTIFIER)` and must stay equal to the dext bundle ID.
 
 ## Build
 
-Selecione o scheme `UA55DiagnosticApp`, destino My Mac, e rode.
+Select the `UA55DiagnosticApp` scheme, destination My Mac, and run.
 
 ```bash
 xcodebuild -project UA55Diagnostic.xcodeproj -scheme UA55DiagnosticApp -destination 'platform=macOS,arch=arm64' build
 ```
 
-Parser sem hardware:
+Parser without hardware:
 
 ```bash
 c++ -std=c++17 -I Shared Tests/DescriptorWalkTest.cpp Shared/UA55DescriptorWalk.cpp -o /tmp/UA55DescriptorTests
 /tmp/UA55DescriptorTests
 ```
 
-## Ativar (marco 4 — áudio)
+## Activate
 
-1. Copie o app para `/Applications` (system extensions exigem isso).
-2. Conecte a QUAD-CAPTURE.
-3. No app: **Desativar** → **Ativar driver**; aprove a extensão em Ajustes.
-4. Reconecte a interface.
-5. Confira:
+1. Copy the app to `/Applications` (system extensions require that).
+2. Connect the QUAD-CAPTURE.
+3. In the app: **Deactivate** → **Activate driver**, then approve the extension in System Settings.
+4. Reconnect the interface.
+5. Check:
 
 ```bash
 systemextensionsctl list
@@ -46,14 +46,14 @@ codesign -d --entitlements :- /Applications/UA55DiagnosticApp.app/Contents/Libra
 log show --last 10m --style compact --predicate 'eventMessage CONTAINS "[UA55]"'
 ```
 
-6. Abra **Audio MIDI Setup** — device `QUAD-CAPTURE UA-55` com 4 out / 6 in @ 44.1 kHz.
-7. Em Ajustes → Som, escolha a placa como saída e toque áudio do Mac.
-8. Opcional: grave a entrada no QuickTime.
+6. Open **Audio MIDI Setup**. The device is `QUAD-CAPTURE UA-55`: 4 out / 6 in at 44.1, 48, and 96 kHz, and 2 out / 2 in at 192 kHz.
+7. In System Settings → Sound, choose the interface as the output and play audio from the Mac.
+8. Optional: record an input in QuickTime.
 
-Versão esperada: marketing `0.1.0`, build `8`.
+Expected version: marketing `0.1.0`, build `74`. On plug-in the driver prints `[UA55] ========== BUILD 74 loaded`.
 
-## Desenvolvimento
+## Development
 
-`systemextensionsctl developer on` reduz o atrito. SIP fica de acordo com a política da máquina.
+`systemextensionsctl developer on` reduces friction. SIP stays with the machine's policy.
 
-Para remover a extensão, use **Desativar** no app ou `systemextensionsctl list`.
+To remove the extension, use **Deactivate** in the app or `systemextensionsctl list`.

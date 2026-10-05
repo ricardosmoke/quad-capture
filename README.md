@@ -4,7 +4,7 @@ An **experimental** open-source audio driver for the [Roland QUAD-CAPTURE](https
 
 Roland’s original Mac driver is old and no longer a good fit for modern macOS. This project aims to make the interface usable again: plug it in, see it in macOS, play and record audio, and watch the hardware preamp knobs on screen.
 
-> **Status:** Playback and recording work at **44.1, 48, and 96 kHz** (4 out / 6 in) and at **192 kHz** (2 out / 2 in). Current driver build **62**.  
+> **Status:** Playback and recording work at **44.1, 48, and 96 kHz** (4 out / 6 in) and at **192 kHz** (2 out / 2 in). Current driver build **74**.  
 > This is **not** an official Roland product. Use at your own risk.
 
 ---
@@ -18,7 +18,7 @@ Roland’s original Mac driver is old and no longer a good fit for modern macOS.
 | **192 kHz** | 2 outputs, 2 inputs (the interface only offers that rate in stereo) |
 | **Output volume** | Main, left, and right controls in macOS |
 | **Where it shows up** | Audio MIDI Setup, System Settings → Sound, GarageBand, Logic, etc. |
-| **On-screen panel** | Mirrors the hardware SENS knobs (0–54 dB) and AUTO SENS, and switches sample rate |
+| **On-screen panel** | Mirrors the hardware SENS knobs (0–54 dB) and AUTO SENS, sends the compressor, LINK, and mixer monitor knobs, and switches sample rate |
 
 In plain terms: after you install the driver, the QUAD-CAPTURE should behave like a normal Mac audio device. You can listen through it, record into it, and change the sample rate from Audio MIDI Setup.
 
@@ -26,8 +26,8 @@ In plain terms: after you install the driver, the QUAD-CAPTURE should behave lik
 
 ## What it does *not* do (yet)
 
-- **No full Roland Control Panel.** The companion app displays the hardware SENS knobs and AUTO SENS, and the LO-CUT, PHASE, AUTO SENS, SENS knobs, compressor BYPASS, LINK, and the mixer INPUT 1, INPUT 2, and COAX knobs send the Roland SysEx through the driver. Other compressor knobs stay local.
-- **On-screen compressor knobs other than GATE, THRESHOLD, RATIO, ATTACK, RELEASE, and GAIN are local.** The mixer INPUT 1, INPUT 2, and COAX knobs send the monitor level when the user turns them. Sample rate is the footer control: it asks Core Audio to change the device clock, the same way Audio MIDI Setup does.
+- **No full Roland Control Panel.** The companion app sends LO-CUT, PHASE, AUTO SENS, the SENS knobs, compressor BYPASS, LINK, GATE, THRESHOLD, RATIO, ATTACK, RELEASE, GAIN, and the mixer INPUT 1, INPUT 2, and COAX knobs. A mixer turn changes the monitor level, not the recording level.
+- **Sample rate goes through Core Audio.** The footer control asks macOS to change the device clock, the same way Audio MIDI Setup does.
 - **Not signed for mass distribution.** You need an Apple Developer account and must approve a system extension on your Mac.
 - **Apple Silicon only.** Not aimed at Intel Macs.
 
@@ -114,7 +114,7 @@ xcodebuild -project QuadCapturePanelMac/QuadCapturePanel.xcodeproj \
 
 Copy `QuadCapturePanel.app` to **Applications** and open it. The SENS readouts move when you turn the knobs on the box. AUTO SENS lights when the hardware button is on and goes gray when it is off.
 
-The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 74: deactivate, install the new app, activate, and reconnect the USB cable. LO-CUT, PHASE, AUTO SENS, the SENS knobs, the compressor BYPASS buttons, LINK, the GATE, THRESHOLD, RATIO, ATTACK, RELEASE, and GAIN knobs, and the mixer INPUT 1, INPUT 2, and COAX knobs need that same build: the click or drag sends the SysEx through the driver. Opening the panel, or the board coming back after it was off, reads LO-CUT, PHASE, AUTO SENS, both BYPASS buttons, LINK, and the mixer INPUT 1, INPUT 2, and COAX knobs. Each of those clicks sends its command and then asks the board for that same button state again.
+The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 74: deactivate, install the new app, activate, and reconnect the USB cable. LO-CUT, PHASE, AUTO SENS, the SENS knobs, the compressor BYPASS buttons, LINK, the GATE, THRESHOLD, RATIO, ATTACK, RELEASE, and GAIN knobs, and the mixer INPUT 1, INPUT 2, and COAX knobs need that same build: the click or drag sends the SysEx through the driver. Opening the panel, or the board coming back after it was off, reads LO-CUT, PHASE, AUTO SENS, both BYPASS buttons, LINK, both GATE knobs, and the three mixer knobs. LO-CUT, PHASE, AUTO SENS, and LINK ask the board for the button state again after the click. A SENS turn does the same when the drag ends, because the board turns AUTO SENS on by itself. Mixer and compressor knobs show their value beside the knob only while you are turning it.
 
 ---
 
@@ -126,7 +126,7 @@ The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If
 | `UA55DiagnosticDriver` | The audio + USB driver (dext), including SENS and AUTO SENS logging |
 | `Shared/` | USB constants, sample-rate table, and helpers shared by the driver |
 | `docs/` | Build, entitlements, design notes |
-| `QuadCapturePanelMac/` | On-screen panel. Optional for audio. Displays hardware SENS and AUTO SENS. LO-CUT, PHASE, AUTO SENS, the SENS knobs, compressor BYPASS, LINK, GATE, THRESHOLD, RATIO, ATTACK, RELEASE, and GAIN send SysEx through the driver |
+| `QuadCapturePanelMac/` | On-screen panel. Optional for audio. Displays hardware SENS and AUTO SENS. LO-CUT, PHASE, AUTO SENS, the SENS knobs, compressor BYPASS, LINK, GATE, THRESHOLD, RATIO, ATTACK, RELEASE, GAIN, and the mixer INPUT 1, INPUT 2, and COAX knobs send SysEx through the driver |
 
 ---
 
@@ -145,7 +145,7 @@ Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
 ## Stability note
 
-**Build 72** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, a read-only view of the preamp knobs until you drag them, and LO-CUT, PHASE, AUTO SENS, SENS, compressor BYPASS, LINK, GATE, THRESHOLD, RATIO, ATTACK, RELEASE, and GAIN SysEx written to USB MIDI cable 1. The panel asks for the 59-byte state block, both BYPASS channels, LINK, and both GATE knobs when the board connects and again after each of those buttons is clicked.
+**Build 74** is the current driver: duplex audio at 44.1, 48, and 96 kHz, stereo at 192 kHz, macOS output volume, a read-only view of the preamp knobs until you drag them, and LO-CUT, PHASE, AUTO SENS, SENS, compressor BYPASS, LINK, GATE, THRESHOLD, RATIO, ATTACK, RELEASE, GAIN, and mixer monitor SysEx written to USB MIDI cable 1. When the board connects, the panel asks for the 59-byte state block, both BYPASS channels, LINK, both GATE knobs, and the three mixer monitor levels.
 
 An older extension stays in force until you deactivate it and activate the copy in `/Applications`. The log line `BUILD 74` is the check that the new dext actually loaded.
 
@@ -159,7 +159,7 @@ This is a reverse-engineering and learning project around a discontinued USB aud
 - Fixes that stay within DriverKit rules (no kernel extensions)
 - Careful experiments that don’t brick the machine
 
-The on-screen panel is a mirror of two hardware controls, not a replacement for Roland’s old Control Panel.
+The on-screen panel mirrors the hardware SENS knobs and AUTO SENS, and sends the compressor, LINK, and mixer controls listed above. It is not a replacement for Roland’s old Control Panel.
 
 ---
 

@@ -1,20 +1,20 @@
-# Hipóteses
+# Hypotheses
 
-Separação: fato medido neste Mac, layout USB 2.0, contrato Apple, referência Linux.
+Split: fact measured on this Mac, USB 2.0 layout, Apple contract, Linux reference.
 
-## Marco 1 — confirmado (2026-09-28)
+## Milestone 1 — confirmed (2026-09-28)
 
-- Dext `dev.ua55.UA55DiagnosticApp.driver` v0.1.0/2, entitlement USB `idVendor=*`.
+- Dext `dev.ua55.UA55DiagnosticApp.driver` v0.1.0/2, USB entitlement `idVendor=*`.
 - `[UA55] Start` → `SetConfiguration(1,true)=SUCCESS` → `diagnostic resident`.
 - Device: VID `0x0582` PID `0x012F`, `bcdUSB=0x0200`, `deviceClass=0xff`, `bcdDevice=0x0100`, 480 Mbps.
 - Config 1: `wTotalLength=511`, `bMaxPower=225` (450 mA), 5 interfaces, 19 iface / 17 ep / 26 other descriptors.
-- `ioreg`: cinco `IOUSBHostInterface` (0–4), todas `bInterfaceClass=255`.
+- `ioreg`: five `IOUSBHostInterface` (0–4), all `bInterfaceClass=255`.
 
-### Mapa medido (fonte: log `[UA55]`)
+### Measured map (source: `[UA55]` log)
 
-Descritores CS `0x24` subtype `0x02` (FORMAT_TYPE-like): `bNrChannels`, subframe 4, bitres 24 (`04 18`).
+CS descriptors `0x24` subtype `0x02` (FORMAT_TYPE-like): `bNrChannels`, subframe 4, bit resolution 24 (`04 18`).
 
-| IF | Alt | EP | Dir | Tipo | maxPacket | Canais (CS) | Papel |
+| IF | Alt | EP | Dir | Type | maxPacket | Channels (CS) | Role |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0 | 0 | — | — | — | — | — | idle |
 | 0 | 1 | `0x05` | OUT | isoc attr`0x05` | 112 | 4 | playback |
@@ -33,53 +33,53 @@ Descritores CS `0x24` subtype `0x02` (FORMAT_TYPE-like): `bNrChannels`, subframe
 | 4 | 0 | — | — | — | — | — | idle |
 | 4 | 1–4 | `0x81` | IN | interrupt 8 | — | — | status/ctrl (interval 1–4) |
 
-Sanidade de pacote (HS, `bInterval=1` = 125 µs): `7 × 4ch × 4 B = 112`, `7 × 6ch × 4 B = 168`. Fecha com alt 1/2.
+Packet check (HS, `bInterval=1` = 125 µs): `7 × 4ch × 4 B = 112`, `7 × 6ch × 4 B = 168`. That matches alt 1/2.
 
-### vs quirk Linux (`quirks-table.h` 0x0582:0x012f)
+### vs Linux quirk (`quirks-table.h` 0x0582:0x012f)
 
-| Item | Linux quirk | Medido neste aparelho |
+| Item | Linux quirk | Measured on this unit |
 | --- | --- | --- |
 | Playback | IF0 alt1 EP`0x05` S32_LE 4ch 44.1k | IF0 alt1 EP`0x05` 4ch 24-in-32, maxPacket 112 |
 | Capture | IF1 alt1 EP`0x85` S32_LE 6ch 44.1k | IF1 alt1 EP`0x85` 6ch 24-in-32, maxPacket 168 |
 | MIDI | IF2 | IF2 bulk `0x06`/`0x86` |
-| IF3/4 | ignoradas | interrupt status; não áudio |
+| IF3/4 | ignored | interrupt status; not audio |
 
-O quirk Linux só declara alt 1 @ 44.1 kHz. O hardware expõe alts 2–4 (provável 48/96/192 e modo 2ch no alt 4). Frequências exatas **não** estão no dump truncado dos bytes CS; falta ler os 3 bytes de `tSamFreq` ou provar com stream.
+The Linux quirk only declares alt 1 at 44.1 kHz. The hardware exposes alts 2–4 (likely 48/96/192, and 2-channel mode on alt 4). The exact rates are **not** in the truncated CS-byte dump; the 3 `tSamFreq` bytes still had to be read, or proved with a stream.
 
-## Marco 2 — confirmado no hardware (build 3/4)
+## Milestone 2 — confirmed on hardware (build 3/4)
 
-Medido em 2026-09-28:
+Measured on 2026-09-28:
 
 - Claim IF0/IF1, Open, `SelectAlternateSetting(1)`, `CopyPipe` → SUCCESS
 - Capture `IsochIO` sync → `0x00000000`, 8/8 frames OK
-- Pacotes `complete=144` e `120` (= 6 e 5 samples × 6 ch × 4 B) → **44.1 kHz HS**
-- `nonzeroS32=60` → dados reais no buffer de captura
-- Playback sync `IsochIO` **trava** o `Start` (EP OUT attr `0x05` async). Removido no build 4; volta no marco 3 como async/duplex
+- Packets `complete=144` and `120` (= 6 and 5 samples × 6 ch × 4 B) → **44.1 kHz HS**
+- `nonzeroS32=60` → real data in the capture buffer
+- Playback sync `IsochIO` **stalls** `Start` (EP OUT attr `0x05` async). Removed in build 4; it returns in milestone 3 as async/duplex
 
-## Marco 3 — duplex async confirmado (build 7, 2026-09-28)
+## Milestone 3 — async duplex confirmed (build 7, 2026-09-28)
 
 - `diagnostic resident` + `duplex async streaming started`
-- Capture e playback: `errors=0`, completions contínuos (~1000/s com depth=4 × 8 µframes)
-- Capture estabiliza em **~1 058 400 B/s** = 44100 × 6 ch × 4 B → 44.1 kHz confirmado em stream contínuo
-- Playback envia silêncio a maxPacket cheio (112 × 8 × N) sem stall
-- Buffer via `IOBufferMemoryDescriptor::Create` + submit fora do `Start` (evita deadlock do workloop)
+- Capture and playback: `errors=0`, continuous completions (~1000/s with depth=4 × 8 µframes)
+- Capture settles at **~1,058,400 B/s** = 44100 × 6 ch × 4 B → 44.1 kHz confirmed on a continuous stream
+- Playback sends silence at a full maxPacket (112 × 8 × N) without a stall
+- Buffer via `IOBufferMemoryDescriptor::Create` + submit outside `Start` (avoids the workloop deadlock)
 
-## Marco 4 — AudioDriverKit (build 8)
+## Milestone 4 — AudioDriverKit (build 8)
 
-Implementado no código:
+Implemented in the code at that point:
 
 - Entitlement `family.audio` + link `AudioDriverKit`
-- `UA55AudioDriver` (`IOUserAudioDriver`) + `UA55AudioDevice` (4 out / 6 in Float32 @ 44.1 kHz)
-- `UA55UsbStream` (anel isoc duplex reutilizável)
-- Ponte HAL ↔ USB: `IOOperationHandler` Float32↔S32 + StartIO/StopIO no isoc
+- `UA55AudioDriver` (`IOUserAudioDriver`) + `UA55AudioDevice` (4 out / 6 in Float32 at 44.1 kHz)
+- `UA55UsbStream` (reusable duplex isochronous ring)
+- HAL ↔ USB bridge: `IOOperationHandler` Float32↔S32 + StartIO/StopIO on the isochronous stream
 - Device name: `QUAD-CAPTURE UA-55`
 
-Validação no hardware: pendente (Audio MIDI Setup + playback).
+Hardware validation: pending at that date (Audio MIDI Setup + playback).
 
-## Ainda aberto
+## Still open at that date
 
 1. Alts 2–4 / vendor clock.
-2. MIDI e controles.
-3. Ajuste fino de latência/timestamps USB.
+2. MIDI and controls.
+3. Fine-tuning of latency and USB timestamps.
 
-`Shared/UA55Quirks.h`: `kUA55VendorRequestsEnabled` continua `false`.
+`Shared/UA55Quirks.h`: `kUA55VendorRequestsEnabled` remained `false`.
