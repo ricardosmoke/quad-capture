@@ -529,6 +529,8 @@ enum PanelCanvas {
         text(&context, "INTERNAL", 360, footerY, 120, 34, 14, clock, bold: true, left: true)
         if !state.loCutStatus.isEmpty {
             text(&context, state.loCutStatus, 488, footerY, 270, 34, 10, Color(hex: 0xFF8A80), bold: false, left: true)
+        } else if !state.webURL.isEmpty {
+            text(&context, state.webURL, 488, footerY, 270, 34, 11, clock, bold: false, left: true)
         }
 
         let live = state.connected

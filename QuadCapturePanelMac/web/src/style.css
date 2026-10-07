@@ -1,0 +1,241 @@
+:root {
+  color: #f2f2f2;
+  background: #1c1c1c;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1c1c1c;
+}
+
+button, input { font-family: inherit; }
+
+.viewport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.stage {
+  position: relative;
+  flex: 0 0 auto;
+  width: 866px;
+  height: 592px;
+  background: #2a2a2a;
+  user-select: none;
+  transform-origin: center center;
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 866px;
+  height: 36px;
+  background: #323232;
+}
+
+.plate {
+  position: absolute;
+  right: 8px;
+  top: 2px;
+  width: 272px;
+  height: 32px;
+  background: #4e4e4e;
+  border: 1px solid #8a8a8a;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  font-weight: 700;
+  clip-path: polygon(16% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.column {
+  position: absolute;
+  background: #3a3a3a;
+  border: 2px solid #1a1a1a;
+  box-shadow: inset 0 0 0 1px #6a6a6a;
+  border-radius: 3px;
+}
+
+.column h2 {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.hw {
+  position: absolute;
+  border: 0;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #2a2a2a;
+  box-shadow: 2px 2px 0 #1a1a1a, inset 0 1px 0 #fff;
+  cursor: pointer;
+}
+
+.hw.on { background: #f0b0c4; outline: 1px solid #c48498; }
+.hw.off { background: #d9d4cc; outline: 1px solid #a8a39c; }
+
+.caption {
+  position: absolute;
+  text-align: center;
+  color: #d8d8d8;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lcd {
+  position: absolute;
+  background: #101010;
+  color: #39f06a;
+  border: 1px solid #333;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.number {
+  position: absolute;
+  font-size: 28px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.knob {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, #4a4a4a 0 18%, #161616 19% 100%);
+  box-shadow: 0 2px 0 #0e0e0e;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.readout {
+  position: absolute;
+  color: #f2f2f2;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.footer {
+  position: absolute;
+  left: 0;
+  top: 558px;
+  width: 866px;
+  height: 34px;
+  background: #242424;
+  border-top: 1px solid #111;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rate {
+  position: relative;
+  width: 110px;
+  height: 24px;
+  background: #111;
+  border: 1px solid #666;
+  border-radius: 3px;
+  color: #f2f2f2;
+  text-align: left;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.menu {
+  position: absolute;
+  left: 150px;
+  bottom: 32px;
+  width: 110px;
+  background: #111;
+  border: 1px solid #666;
+  z-index: 3;
+}
+
+.menu button {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: #f2f2f2;
+  border: 0;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.menu button.active { color: #5cfff0; }
+
+.clock { color: #5cfff0; margin-left: 28px; }
+.error { color: #ff8a80; font-size: 10px; font-weight: 400; margin-left: 12px; }
+.live { margin-left: auto; color: #39f06a; font-size: 11px; }
+.live.off { color: #ff8a80; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; }
+
+.cover {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: grid;
+  place-items: center;
+  z-index: 4;
+}
+
+.cover-card {
+  background: #3a3a3a;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
+  padding: 18px 28px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.login {
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.login form {
+  width: 280px;
+  background: #3a3a3a;
+  border: 2px solid #1a1a1a;
+  padding: 28px;
+  display: grid;
+  gap: 12px;
+}
+
+.login h1 { margin: 0; font-size: 18px; }
+.login input {
+  padding: 8px;
+  background: #111;
+  color: #f2f2f2;
+  border: 1px solid #666;
+}
+.login button {
+  background: #f0b0c4;
+  border: 0;
+  padding: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.login .bad { color: #ff8a80; font-size: 12px; margin: 0; }

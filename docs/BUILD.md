@@ -52,6 +52,26 @@ log show --last 10m --style compact --predicate 'eventMessage CONTAINS "[UA55]"'
 
 Expected version: marketing `0.1.0`, build `74`. On plug-in the driver prints `[UA55] ========== BUILD 74 loaded`.
 
+## Panel and local web page
+
+The panel is a separate app. Audio does not need it.
+
+```bash
+xcodebuild -project QuadCapturePanelMac/QuadCapturePanel.xcodeproj -scheme QuadCapturePanel -destination 'platform=macOS,arch=arm64' build
+```
+
+Copy `QuadCapturePanel.app` to `/Applications` and open it. The footer shows a local address on port **8745**. That page is the same panel. The password is `QuadCapture`. Opening the page does not send SysEx. The server accepts only local addresses: loopback, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, and link-local.
+
+The page is a Vue 3 app in `QuadCapturePanelMac/web`. Rebuild it before the Xcode build when that source changes:
+
+```bash
+cd QuadCapturePanelMac/web
+npm install
+npm run build
+```
+
+`npm run build` writes the static files to `QuadCapturePanelMac/QuadCapturePanel/Web`, which the panel target copies into the app. The driver does not change for this page.
+
 ## Development
 
 `systemextensionsctl developer on` reduces friction. SIP stays with the machine's policy.

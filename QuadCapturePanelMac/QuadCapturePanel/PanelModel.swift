@@ -54,6 +54,7 @@ final class PanelModel: ObservableObject {
         var mixerOut2: CGFloat = 0
         var mixerOut2Peak: CGFloat = 0
         var sampleRateText: String = "—"
+        var webURL: String = ""
     }
 
     @Published var sens1: Double = 0
@@ -102,8 +103,10 @@ final class PanelModel: ObservableObject {
     @Published private var mixerDragIndex: Int?
     @Published private var compDrag: KnobID?
     @Published var levels = InputLevelMonitor.Snapshot()
+    @Published var webURL = ""
 
     private let monitor = InputLevelMonitor()
+    private let webServer = PanelWebServer()
     private var cancellable: Timer?
     private var sensBusy = false
 
@@ -147,6 +150,7 @@ final class PanelModel: ObservableObject {
         s.mixerOut2 = mixerOutput(1, peak: false)
         s.mixerOut2Peak = mixerOutput(1, peak: true)
         s.sampleRateText = UA55Device.label(for: levels.sampleRateHz)
+        s.webURL = webURL
         return s
     }
 
@@ -427,12 +431,21 @@ final class PanelModel: ObservableObject {
         showButtonsOff()
         monitor.start()
         HardwareGain.start()
+        webServer.start { [weak self] command in
+            Task { @MainActor in
+                self?.applyWeb(command)
+            }
+        }
+        webURL = webServer.advertisedURL()
         cancellable = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.levels = self.monitor.snapshot
                 self.noteBoard(self.levels.connected)
                 self.applySetupSwitches()
+                if self.webServer.hasClients {
+                    self.webServer.broadcast(self.webSnapshotData())
+                }
                 guard !self.sensBusy else { return }
                 self.sensBusy = true
                 let epoch = self.autoSensEpoch
@@ -576,6 +589,7 @@ final class PanelModel: ObservableObject {
         sensRefresh?.cancel()
         cancellable?.invalidate()
         cancellable = nil
+        webServer.stop()
         HardwareGain.stop()
         monitor.stop()
     }
@@ -909,6 +923,136 @@ final class PanelModel: ObservableObject {
         let coax = (source.count > coaxIndex ? source[coaxIndex] : 0) * CGFloat(mixCoax)
         let mixed = max(input * CGFloat(knob), coax)
         return min(1, mixed * CGFloat(0.5 + mixOutput * 0.7))
+    }
+
+    /// A página web usa os mesmos métodos do painel. Abrir a página não envia SysEx.
+    private func applyWeb(_ command: [String: Any]) {
+        switch command["op"] as? String {
+        case "loCut"?:
+            if let channel = webInt(command["channel"]) { toggleLoCut(channel: channel) }
+        case "phase"?:
+            if let channel = webInt(command["channel"]) { togglePhase(channel: channel) }
+        case "autoSens"?:
+            pressAutoSens()
+        case "bypass"?:
+            if let channel = webInt(command["channel"]) { toggleBypass(channel: channel) }
+        case "link"?:
+            toggleLink()
+        case "sens"?:
+            if let channel = webInt(command["channel"]), let value = webDouble(command["value"]) {
+                userSetSens(channel: channel, normalized: value)
+            }
+        case "mixer"?:
+            guard let index = webInt(command["index"]) else { return }
+            if let active = command["active"] as? Bool {
+                setMixerDrag(index, active: active)
+            }
+            if let value = webDouble(command["value"]) {
+                userSetMixer(index: index, normalized: value)
+            }
+        case "comp"?:
+            guard let channel = webInt(command["channel"]),
+                  let name = command["knob"] as? String,
+                  let key = compKey(name) else { return }
+            if let active = command["active"] as? Bool, let id = compDragID(channel: channel, knob: name) {
+                setCompDrag(id, active: active)
+            }
+            if let value = webDouble(command["value"]) {
+                setCompKnob(channel: channel, key, value)
+            }
+        case "rate"?:
+            if let hz = webDouble(command["hz"]) { setSampleRate(hz) }
+        default:
+            break
+        }
+    }
+
+    private func webSnapshotData() -> Data {
+        let state = drawState
+        func strip(
+            _ item: CompStrip, _ text: [String], _ gr: CGFloat, _ out: CGFloat, _ peak: CGFloat
+        ) -> [String: Any] {
+            [
+                "bypass": item.bypass,
+                "gate": item.gate,
+                "threshold": item.threshold,
+                "ratio": item.ratio,
+                "attack": item.attack,
+                "release": item.release,
+                "gain": item.gain,
+                "text": text,
+                "gr": Double(gr),
+                "out": Double(out),
+                "outPeak": Double(peak),
+            ]
+        }
+        let object: [String: Any] = [
+            "settled": levels.settled,
+            "connected": state.connected,
+            "status": state.status,
+            "sens": [state.sens1, state.sens2],
+            "sensText": [state.sens1Text, state.sens2Text],
+            "autoSens": state.autoSensText,
+            "loCut": [state.loCut1, state.loCut2],
+            "phase": [state.phase1, state.phase2],
+            "link": state.linkOn,
+            "error": state.loCutStatus,
+            "comp": [
+                strip(state.comp1, state.comp1Text, state.gr1, state.compOut1, state.compOut1Peak),
+                strip(state.comp2, state.comp2Text, state.gr2, state.compOut2, state.compOut2Peak),
+            ],
+            "mix": [state.mixOutput, state.mixInput1, state.mixInput2],
+            "mixText": [state.mix1Text, state.mix2Text, state.mix3Text],
+            "pre": [
+                ["level": Double(state.pre1), "peak": Double(state.pre1Peak)],
+                ["level": Double(state.pre2), "peak": Double(state.pre2Peak)],
+            ],
+            "mixerOut": [
+                ["level": Double(state.mixerOut1), "peak": Double(state.mixerOut1Peak)],
+                ["level": Double(state.mixerOut2), "peak": Double(state.mixerOut2Peak)],
+            ],
+            "sampleRate": state.sampleRateText,
+            "sampleRateHz": levels.sampleRateHz,
+        ]
+        return (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
+    }
+
+    private func compKey(_ name: String) -> WritableKeyPath<CompStrip, Double>? {
+        switch name {
+        case "gate": return \.gate
+        case "threshold": return \.threshold
+        case "ratio": return \.ratio
+        case "attack": return \.attack
+        case "release": return \.release
+        case "gain": return \.gain
+        default: return nil
+        }
+    }
+
+    private func compDragID(channel: Int, knob: String) -> KnobID? {
+        switch (channel, knob) {
+        case (0, "gate"): return .comp1Gate
+        case (0, "threshold"): return .comp1Threshold
+        case (0, "ratio"): return .comp1Ratio
+        case (0, "attack"): return .comp1Attack
+        case (0, "release"): return .comp1Release
+        case (0, "gain"): return .comp1Gain
+        case (1, "gate"): return .comp2Gate
+        case (1, "threshold"): return .comp2Threshold
+        case (1, "ratio"): return .comp2Ratio
+        case (1, "attack"): return .comp2Attack
+        case (1, "release"): return .comp2Release
+        case (1, "gain"): return .comp2Gain
+        default: return nil
+        }
+    }
+
+    private func webInt(_ value: Any?) -> Int? {
+        (value as? NSNumber)?.intValue
+    }
+
+    private func webDouble(_ value: Any?) -> Double? {
+        (value as? NSNumber)?.doubleValue
     }
 }
 

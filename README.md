@@ -18,7 +18,7 @@ Roland’s original Mac driver is old and no longer a good fit for modern macOS.
 | **192 kHz** | 2 outputs, 2 inputs (the interface only offers that rate in stereo) |
 | **Output volume** | Main, left, and right controls in macOS |
 | **Where it shows up** | Audio MIDI Setup, System Settings → Sound, GarageBand, Logic, etc. |
-| **On-screen panel** | Mirrors the hardware SENS knobs (0–54 dB) and AUTO SENS, sends the compressor, LINK, and mixer monitor knobs, and switches sample rate |
+| **On-screen panel** | Mirrors the hardware SENS knobs (0–54 dB) and AUTO SENS, sends the compressor, LINK, and mixer monitor knobs, and switches sample rate. The same panel is also a page on the local network |
 
 In plain terms: after you install the driver, the QUAD-CAPTURE should behave like a normal Mac audio device. You can listen through it, record into it, and change the sample rate from Audio MIDI Setup.
 
@@ -116,6 +116,8 @@ Copy `QuadCapturePanel.app` to **Applications** and open it. The SENS readouts m
 
 The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If the knobs stay still, the running extension is older than build 74: deactivate, install the new app, activate, and reconnect the USB cable. LO-CUT, PHASE, AUTO SENS, the SENS knobs, the compressor BYPASS buttons, LINK, the GATE, THRESHOLD, RATIO, ATTACK, RELEASE, and GAIN knobs, and the mixer INPUT 1, INPUT 2, and COAX knobs need that same build: the click or drag sends the SysEx through the driver. Opening the panel, or the board coming back after it was off, reads LO-CUT, PHASE, AUTO SENS, both BYPASS buttons, LINK, both GATE knobs, and the three mixer knobs. LO-CUT, PHASE, AUTO SENS, and LINK ask the board for the button state again after the click. A SENS turn does the same when the drag ends, because the board turns AUTO SENS on by itself. Mixer and compressor knobs show their value beside the knob only while you are turning it.
 
+While QuadCapturePanel is open it also serves that same panel as a web page on the local network, port **8745**. The footer shows the address, for example `http://192.168.x.x:8745`. On the same Mac, `http://127.0.0.1:8745` works too. The page asks for the password **QuadCapture** and then keeps a session cookie. Opening the page does not send anything to the board. Clicks and knob turns go through the Mac panel, on the same SysEx path. The server accepts loopback, private LAN addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), and link-local addresses. The first connection from another computer may ask macOS to allow incoming connections. The page source is Vue 3 in `QuadCapturePanelMac/web`; `npm run build` there refreshes the files the app serves.
+
 ---
 
 ## Project layout
@@ -126,7 +128,7 @@ The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If
 | `UA55DiagnosticDriver` | The audio + USB driver (dext), including SENS and AUTO SENS logging |
 | `Shared/` | USB constants, sample-rate table, and helpers shared by the driver |
 | `docs/` | Build, entitlements, design notes |
-| `QuadCapturePanelMac/` | On-screen panel. Optional for audio. Displays hardware SENS and AUTO SENS. LO-CUT, PHASE, AUTO SENS, the SENS knobs, compressor BYPASS, LINK, GATE, THRESHOLD, RATIO, ATTACK, RELEASE, GAIN, and the mixer INPUT 1, INPUT 2, and COAX knobs send SysEx through the driver |
+| `QuadCapturePanelMac/` | On-screen panel, plus the local web page it serves on port 8745. Optional for audio. Displays hardware SENS and AUTO SENS. LO-CUT, PHASE, AUTO SENS, the SENS knobs, compressor BYPASS, LINK, GATE, THRESHOLD, RATIO, ATTACK, RELEASE, GAIN, and the mixer INPUT 1, INPUT 2, and COAX knobs send SysEx through the driver |
 
 ---
 
@@ -138,6 +140,7 @@ The panel follows `[UA55] sens` and `[UA55] autosens` from the loaded driver. If
 | Wrong / old build still loaded | Deactivate in the app, rebuild, copy again to `/Applications`, Activate, reconnect USB. Confirm `[UA55] ========== BUILD 74 loaded`. |
 | Sample rate will not stick | Pick the rate in Audio MIDI Setup, then reconnect if the device disappears. 192 kHz is stereo only (2 out / 2 in). |
 | Panel knobs do not follow the hardware | The loaded dext is not logging SENS. Reactivate build 74 and reconnect. |
+| Web page does not open | QuadCapturePanel must be running. Use the address in its footer, or `http://127.0.0.1:8745` on the same Mac. Another computer has to be on the same local network. macOS may ask to allow incoming connections the first time. The password is `QuadCapture`. |
 
 Entitlements checklist: **[docs/ENTITLEMENTS.md](docs/ENTITLEMENTS.md)**.
 
@@ -159,7 +162,7 @@ This is a reverse-engineering and learning project around a discontinued USB aud
 - Fixes that stay within DriverKit rules (no kernel extensions)
 - Careful experiments that don’t brick the machine
 
-The on-screen panel mirrors the hardware SENS knobs and AUTO SENS, and sends the compressor, LINK, and mixer controls listed above. It is not a replacement for Roland’s old Control Panel.
+The on-screen panel mirrors the hardware SENS knobs and AUTO SENS, and sends the compressor, LINK, and mixer controls listed above. While it is open, that same panel is also a page on the local network. It is not a replacement for Roland’s old Control Panel.
 
 ---
 
